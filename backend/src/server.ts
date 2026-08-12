@@ -10,8 +10,8 @@ async function main() {
 
   const app = createApp();
 
-  const server = app.listen(env.port, () => {
-    logger.info(`FileDrop API listening on port ${env.port} (${env.nodeEnv})`);
+  const server = app.listen(env.port, "0.0.0.0", () => {
+    logger.info(`Server running on port ${env.port} (${env.nodeEnv})`);
   });
 
   const cleanupTask = scheduleCleanupJob();
