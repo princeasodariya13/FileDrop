@@ -41,22 +41,6 @@ export function createApp() {
     });
   });
 
-  // Vercel Cron Endpoint
-  app.get("/api/cron/cleanup", async (req, res) => {
-    // Vercel sets this header for authorized cron requests
-    const authHeader = req.headers.authorization;
-    if (env.nodeEnv === "production" && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return res.status(401).json({ error: "Unauthorized cron execution" });
-    }
-    try {
-      const { runCleanupPass } = await import("@/jobs/cleanup.job");
-      await runCleanupPass();
-      res.status(200).json({ success: true, message: "Cleanup pass completed successfully" });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
   app.use("/api/uploads", uploadRoutes);
   app.use("/api/files", fileRoutes);
   app.use("/api/storage", storageRoutes);
