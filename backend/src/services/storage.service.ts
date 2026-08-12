@@ -1,4 +1,5 @@
 import { logger } from "@/utils/logger";
+import { env } from "@/config/env";
 
 export interface MultipartPart {
   partNumber: number;
@@ -27,7 +28,7 @@ export class MockStorageService implements IStorageService {
     for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
       parts.push({
         partNumber,
-        presignedUrl: `http://localhost:5000/mock-storage/upload/${uploadId}/${partNumber}`,
+        presignedUrl: `http://localhost:${env.port}/mock-storage/upload/${uploadId}/${partNumber}`,
       });
     }
     return parts;
@@ -52,7 +53,7 @@ export class MockStorageService implements IStorageService {
 
   async presignDownloadUrl(key: string, downloadFilename: string): Promise<string> {
     logger.info({ key, downloadFilename }, "MockStorageService: presignDownloadUrl");
-    return `http://localhost:5000/mock-storage/download/${encodeURIComponent(key)}`;
+    return `http://localhost:${env.port}/mock-storage/download/${encodeURIComponent(key)}`;
   }
 }
 

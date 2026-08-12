@@ -35,39 +35,16 @@ export async function reserveStorage(bytes: number): Promise<IStorageReservation
 
   const cap = env.maxActiveStorageBytes;
 
-  // We can't reference activeBytes+reservedBytes directly inside the filter
-  // as a computed expression in a plain findOneAndUpdate, so we use the
-  // aggregation-pipeline update form (supported since MongoDB 4.2), which
-  // lets us compute the guard condition atomically within the same op.
   const updated = await StorageLedgerModel.findOneAndUpdate(
-    { _id: "singleton" },
-    [
-      {
-        $set: {
-          reservedBytes: {
-            $cond: [
-              { $lte: [{ $add: ["$activeBytes", "$reservedBytes", bytes] }, cap] },
-              { $add: ["$reservedBytes", bytes] },
-              "$reservedBytes",
-            ],
-          },
-        },
-      },
-    ],
+    {
+      _id: "singleton",
+      $expr: { $lte: [{ $add: ["$activeBytes", "$reservedBytes", bytes] }, cap] },
+    },
+    { $inc: { reservedBytes: bytes } },
     { new: true }
   );
 
   if (!updated) {
-    throw new InsufficientStorageError();
-  }
-
-  // Detect whether our increment actually applied: re-derive expected value.
-  // Because the pipeline above is a no-op when over cap, we verify by
-  // checking if there is room; if reservedBytes didn't move because we were
-  // already at cap boundary, re-check with a light read (safe: false
-  // positives only cause a harmless extra rejection, never an overshoot).
-  const wouldFit = updated.activeBytes + updated.reservedBytes <= cap;
-  if (!wouldFit) {
     throw new InsufficientStorageError();
   }
 

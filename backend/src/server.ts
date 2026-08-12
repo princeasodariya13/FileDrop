@@ -10,11 +10,31 @@ async function main() {
 
   const app = createApp();
 
-  app.listen(env.port, () => {
+  const server = app.listen(env.port, () => {
     logger.info(`FileDrop API listening on port ${env.port} (${env.nodeEnv})`);
   });
 
-  scheduleCleanupJob();
+  const cleanupTask = scheduleCleanupJob();
+
+  // Graceful shutdown
+  const shutdown = async (signal: string) => {
+    logger.info(`Received ${signal}. Shutting down gracefully...`);
+    if (cleanupTask) cleanupTask.stop();
+    server.close(async () => {
+      logger.info("HTTP server closed.");
+      await mongoose.connection.close();
+      logger.info("MongoDB connection closed.");
+      process.exit(0);
+    });
+    // Force shutdown if taking too long
+    setTimeout(() => {
+      logger.error("Could not close connections in time, forcefully shutting down");
+      process.exit(1);
+    }, 10000).unref();
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 main().catch((err) => {

@@ -14,6 +14,9 @@ import storageRoutes from "@/routes/storage.routes";
 export function createApp() {
   const app = express();
 
+  // Trust the first hop (reverse proxy) so rate limiting uses the real client IP.
+  app.set("trust proxy", 1);
+
   app.use(helmet());
   app.use(
     cors({

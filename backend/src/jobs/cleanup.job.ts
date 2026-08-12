@@ -66,10 +66,11 @@ export async function runCleanupPass(): Promise<void> {
   logger.info({ expired, abandoned, reclaimed }, "Cleanup pass complete");
 }
 
-export function scheduleCleanupJob(): void {
+export function scheduleCleanupJob() {
   // Every 5 minutes.
-  cron.schedule("*/5 * * * *", () => {
+  const task = cron.schedule("*/5 * * * *", () => {
     runCleanupPass().catch((err) => logger.error({ err }, "Cleanup pass threw"));
   });
   logger.info("Cleanup job scheduled (every 5 minutes)");
+  return task;
 }
