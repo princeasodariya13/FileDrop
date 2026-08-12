@@ -12,6 +12,6 @@ export function sanitizeFilename(name: string): string {
   return trimmed;
 }
 
-export function buildR2Key(fileId: string, sanitizedName: string): string {
+export function buildStorageKey(fileId: string, sanitizedName: string): string {
   return `files/${fileId}/${sanitizedName}`;
 }

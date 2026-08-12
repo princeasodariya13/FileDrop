@@ -1,37 +1,38 @@
 import { Request, Response, NextFunction } from "express";
 import { env } from "@/config/env";
 import { ok, ApiError } from "@/utils/apiResponse";
-import { sanitizeFilename, buildR2Key, generateFileId, generateSessionId } from "@/utils/ids";
+import { sanitizeFilename, buildStorageKey, generateFileId, generateSessionId } from "@/utils/ids";
 import { createUploadSessionSchema, completeUploadSchema, abortUploadSchema } from "@/validators/upload.validator";
 import { reserveStorage, commitReservation, releaseReservation } from "@/services/storageReservation.service";
-import * as r2 from "@/services/r2.service";
+import { storage } from "@/services/storage.service";
+import crypto from "crypto";
 import { UploadSessionModel } from "@/models/UploadSession.model";
 import { FileModel } from "@/models/File.model";
 import { logger } from "@/utils/logger";
 
-/** POST /api/uploads/session — validate, reserve storage, create R2 multipart upload */
+/** POST /api/uploads/session — validate, reserve storage, create multipart upload */
 export async function createUploadSession(req: Request, res: Response, next: NextFunction) {
   try {
     const input = createUploadSessionSchema.parse(req.body);
 
     const sanitizedName = sanitizeFilename(input.fileName);
     const fileId = generateFileId();
-    const r2Key = buildR2Key(fileId, sanitizedName);
+    const storageKey = buildStorageKey(fileId, sanitizedName);
 
-    // 1. Reserve storage atomically BEFORE talking to R2.
+    // 1. Reserve storage atomically BEFORE talking to the storage provider.
     const reservation = await reserveStorage(input.sizeBytes);
 
     try {
-      // 2. Create the multipart upload on R2.
-      const uploadId = await r2.createMultipartUpload(r2Key, input.mimeType);
+      // 2. Create the multipart upload on storage.
+      const uploadId = await storage.createMultipartUpload(storageKey, input.mimeType);
 
       const partSize = env.multipartPartSizeBytes;
       const totalParts = Math.max(1, Math.ceil(input.sizeBytes / partSize));
 
       const session = await UploadSessionModel.create({
         sessionId: generateSessionId(),
-        r2Key,
-        r2UploadId: uploadId,
+        storageKey,
+        storageUploadId: uploadId,
         originalName: input.fileName,
         sizeBytes: input.sizeBytes,
         mimeType: input.mimeType,
@@ -44,8 +45,8 @@ export async function createUploadSession(req: Request, res: Response, next: Nex
         clientIp: req.ip ?? "unknown",
       });
 
-      // 3. Presign URLs for every part up front (client uploads directly to R2).
-      const parts = await r2.presignUploadParts(r2Key, uploadId, totalParts);
+      // 3. Presign URLs for every part up front (client uploads directly to storage).
+      const parts = await storage.presignUploadParts(storageKey, uploadId, totalParts);
 
       logger.info({ sessionId: session.sessionId, sizeBytes: input.sizeBytes }, "Upload session created");
 
@@ -74,7 +75,7 @@ export async function refreshPartUrls(req: Request, res: Response, next: NextFun
     if (session.status !== "uploading") {
       throw new ApiError(409, "SESSION_NOT_ACTIVE", "This upload session is no longer active.");
     }
-    const parts = await r2.presignUploadParts(session.r2Key, session.r2UploadId, session.totalParts);
+    const parts = await storage.presignUploadParts(session.storageKey, session.storageUploadId, session.totalParts);
     return ok(res, { parts });
   } catch (err) {
     next(err);
@@ -95,17 +96,19 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
     await session.save();
 
     try {
-      await r2.completeMultipartUpload(session.r2Key, session.r2UploadId, input.parts);
+      await storage.completeMultipartUpload(session.storageKey, session.storageUploadId, input.parts);
     } catch {
       session.status = "failed";
       await session.save();
       await releaseReservation(session.reservationId as never);
-      throw new ApiError(502, "R2_COMPLETE_FAILED", "Failed to finalize the upload with storage. Your file was not saved.");
+      throw new ApiError(502, "STORAGE_COMPLETE_FAILED", "Failed to finalize the upload with storage. Your file was not saved.");
     }
 
-    const fileId = session.r2Key.split("/")[1];
+    const fileId = session.storageKey.split("/")[1];
     const sanitizedName = sanitizeFilename(session.originalName);
     const expiresAt = new Date(Date.now() + session.expirationHours * 60 * 60 * 1000);
+
+    const possessionToken = crypto.randomBytes(32).toString("hex");
 
     const file = await FileModel.create({
       fileId,
@@ -113,7 +116,8 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
       sanitizedName,
       sizeBytes: session.sizeBytes,
       mimeType: session.mimeType,
-      r2Key: session.r2Key,
+      storageKey: session.storageKey,
+      possessionToken,
       status: "active",
       downloadLimit: session.downloadLimit,
       downloadCount: 0,
@@ -135,6 +139,7 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
       expiresAt: file.expiresAt,
       downloadLimit: file.downloadLimit,
       shareUrl: `${req.protocol}://${req.get("host")}/file/${file.fileId}`,
+      possessionToken,
     });
   } catch (err) {
     next(err);
@@ -149,8 +154,8 @@ export async function abortUpload(req: Request, res: Response, next: NextFunctio
     if (!session) throw new ApiError(404, "SESSION_NOT_FOUND", "Upload session not found.");
 
     if (session.status === "uploading" || session.status === "initializing") {
-      await r2.abortMultipartUpload(session.r2Key, session.r2UploadId).catch((err) => {
-        logger.warn({ err, sessionId: session.sessionId }, "R2 abort failed (continuing cleanup)");
+      await storage.abortMultipartUpload(session.storageKey, session.storageUploadId).catch((err) => {
+        logger.warn({ err, sessionId: session.sessionId }, "Storage abort failed (continuing cleanup)");
       });
       await releaseReservation(session.reservationId as never);
       session.status = "aborted";

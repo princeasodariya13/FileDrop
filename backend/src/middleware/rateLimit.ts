@@ -1,9 +1,8 @@
 import rateLimit from "express-rate-limit";
-import { env } from "@/config/env";
 
 export const uploadSessionLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: env.rateLimitUploadPerHour,
+  windowMs: 10 * 60 * 1000,
+  limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -12,9 +11,31 @@ export const uploadSessionLimiter = rateLimit({
   },
 });
 
-export const downloadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: env.rateLimitDownloadPerHour,
+export const partLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: "RATE_LIMITED", message: "Too many part requests. Please slow down." },
+  },
+});
+
+export const fileInfoLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: "RATE_LIMITED", message: "Too many file requests. Please slow down." },
+  },
+});
+
+export const downloadUrlLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -24,8 +45,8 @@ export const downloadLimiter = rateLimit({
 });
 
 export const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 300,
+  windowMs: 60 * 1000,
+  limit: 100,
   standardHeaders: true,
   legacyHeaders: false,
 });

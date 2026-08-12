@@ -76,7 +76,6 @@ export function useFileUpload() {
           const blob = file.slice(start, end);
 
           let attempt = 0;
-          // eslint-disable-next-line no-constant-condition
           while (true) {
             try {
               const etag = await uploadPartWithProgress(

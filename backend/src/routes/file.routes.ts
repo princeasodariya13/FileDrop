@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { getFileInfo, generateDownload, deleteFile } from "@/controllers/download.controller";
-import { downloadLimiter } from "@/middleware/rateLimit";
+import { fileInfoLimiter, downloadUrlLimiter } from "@/middleware/rateLimit";
 
 const router = Router();
 
-router.get("/:fileId", getFileInfo);
-router.post("/:fileId/download", downloadLimiter, generateDownload);
-router.delete("/:fileId", deleteFile);
+router.get("/:fileId", fileInfoLimiter, getFileInfo);
+router.post("/:fileId/download", downloadUrlLimiter, generateDownload);
+router.delete("/:fileId", fileInfoLimiter, deleteFile);
 
 export default router;

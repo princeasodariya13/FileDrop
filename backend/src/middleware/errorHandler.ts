@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { ApiError } from "@/utils/apiResponse";
 import { InsufficientStorageError } from "@/services/storageReservation.service";
 import { logger } from "@/utils/logger";
+import { ZodError } from "zod";
 
 export function notFoundHandler(_req: Request, res: Response) {
   res.status(404).json({
@@ -16,6 +17,13 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return res.status(err.status).json({
       success: false,
       error: { code: err.code, message: err.message },
+    });
+  }
+
+  if (err instanceof ZodError) {
+    return res.status(400).json({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: err.errors[0]?.message ?? "Invalid input." },
     });
   }
 

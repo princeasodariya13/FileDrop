@@ -35,6 +35,7 @@ export interface CompleteUploadResponse {
   expiresAt: string;
   downloadLimit: number | null;
   shareUrl: string;
+  possessionToken: string;
 }
 
 export interface FileInfoResponse {

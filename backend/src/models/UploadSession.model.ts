@@ -10,8 +10,8 @@ export type UploadSessionStatus =
 
 export interface IUploadSession extends Document {
   sessionId: string;
-  r2Key: string;
-  r2UploadId: string; // R2/S3 multipart upload id
+  storageKey: string;
+  storageUploadId: string; // multipart upload id
   originalName: string;
   sizeBytes: number;
   mimeType: string;
@@ -29,8 +29,8 @@ export interface IUploadSession extends Document {
 const UploadSessionSchema = new Schema<IUploadSession>(
   {
     sessionId: { type: String, required: true, unique: true, index: true },
-    r2Key: { type: String, required: true },
-    r2UploadId: { type: String, required: true },
+    storageKey: { type: String, required: true },
+    storageUploadId: { type: String, required: true },
     originalName: { type: String, required: true, maxlength: 255 },
     sizeBytes: { type: Number, required: true, min: 1 },
     mimeType: { type: String, required: true },

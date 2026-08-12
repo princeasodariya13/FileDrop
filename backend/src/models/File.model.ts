@@ -1,6 +1,6 @@
 import { Schema, model, Document, Types } from "mongoose";
 
-export type FileStatus = "active" | "expired" | "deleted";
+export type FileStatus = "active" | "expired" | "deleted" | "exhausted";
 
 export interface IFile extends Document {
   fileId: string; // public-facing safe id (nanoid), used in share URLs
@@ -8,7 +8,8 @@ export interface IFile extends Document {
   sanitizedName: string;
   sizeBytes: number;
   mimeType: string;
-  r2Key: string;
+  storageKey: string;
+  possessionToken: string;
   status: FileStatus;
   downloadLimit: number | null; // null = unlimited
   downloadCount: number;
@@ -25,10 +26,11 @@ const FileSchema = new Schema<IFile>(
     sanitizedName: { type: String, required: true, maxlength: 255 },
     sizeBytes: { type: Number, required: true, min: 1 },
     mimeType: { type: String, required: true, maxlength: 255 },
-    r2Key: { type: String, required: true, unique: true },
+    storageKey: { type: String, required: true, unique: true },
+    possessionToken: { type: String, required: true },
     status: {
       type: String,
-      enum: ["active", "expired", "deleted"],
+      enum: ["active", "expired", "deleted", "exhausted"],
       default: "active",
       index: true,
     },

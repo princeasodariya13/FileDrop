@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { FileModel } from "@/models/File.model";
 import { DownloadEventModel } from "@/models/DownloadEvent.model";
 import { ApiError, ok } from "@/utils/apiResponse";
-import * as r2 from "@/services/r2.service";
+import { storage } from "@/services/storage.service";
 import { logger } from "@/utils/logger";
 
 /** GET /api/files/:fileId — public metadata for the share/download page */
@@ -72,7 +72,12 @@ export async function generateDownload(req: Request, res: Response, next: NextFu
       throw new ApiError(410, "DOWNLOAD_LIMIT_REACHED", "This download link is no longer available.");
     }
 
-    const presignedUrl = await r2.presignDownloadUrl(file.r2Key, file.sanitizedName);
+    const presignedUrl = await storage.presignDownloadUrl(file.storageKey, file.sanitizedName);
+
+    if (file.downloadLimit !== null && file.downloadCount >= file.downloadLimit) {
+      file.status = "exhausted";
+      await file.save();
+    }
 
     const ipHash = crypto.createHash("sha256").update(req.ip ?? "unknown").digest("hex");
     await DownloadEventModel.create({
@@ -92,15 +97,20 @@ export async function generateDownload(req: Request, res: Response, next: NextFu
 /** DELETE /api/files/:fileId — owner-initiated early delete */
 export async function deleteFile(req: Request, res: Response, next: NextFunction) {
   try {
+    const possessionToken = req.headers["x-possession-token"];
+    if (!possessionToken || typeof possessionToken !== "string") {
+      throw new ApiError(401, "UNAUTHORIZED", "Missing or invalid possession token.");
+    }
+
     const file = await FileModel.findOneAndUpdate(
-      { fileId: req.params.fileId, status: "active" },
+      { fileId: req.params.fileId, status: "active", possessionToken },
       { $set: { status: "deleted" } },
       { new: true }
     );
     if (!file) throw new ApiError(404, "FILE_NOT_FOUND", "This file is no longer available.");
 
-    await r2.deleteObject(file.r2Key).catch((err) => {
-      logger.error({ err, fileId: file.fileId }, "Failed to delete R2 object");
+    await storage.deleteObject(file.storageKey).catch((err) => {
+      logger.error({ err, fileId: file.fileId }, "Failed to delete storage object");
     });
 
     const { releaseActiveStorage } = await import("@/services/storageReservation.service");

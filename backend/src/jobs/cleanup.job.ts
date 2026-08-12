@@ -1,20 +1,25 @@
 import cron from "node-cron";
 import { FileModel } from "@/models/File.model";
 import { UploadSessionModel } from "@/models/UploadSession.model";
-import * as r2 from "@/services/r2.service";
+import { storage } from "@/services/storage.service";
 import { releaseActiveStorage, reclaimExpiredReservations, releaseReservation } from "@/services/storageReservation.service";
 import { logger } from "@/utils/logger";
 
-/** Expire files whose expiresAt has passed: delete R2 object, release storage, mark expired. */
+/** Expire files whose expiresAt has passed: delete storage object, release storage, mark expired. */
 export async function expireOverdueFiles(): Promise<number> {
-  const overdue = await FileModel.find({ status: "active", expiresAt: { $lt: new Date() } }).limit(200);
+  const overdue = await FileModel.find({
+    $or: [
+      { status: "active", expiresAt: { $lt: new Date() } },
+      { status: "exhausted" },
+    ],
+  }).limit(200);
   let count = 0;
 
   for (const file of overdue) {
     try {
-      await r2.deleteObject(file.r2Key);
+      await storage.deleteObject(file.storageKey);
     } catch (err) {
-      logger.error({ err, fileId: file.fileId }, "Cleanup: failed to delete R2 object, will retry next run");
+      logger.error({ err, fileId: file.fileId }, "Cleanup: failed to delete storage object, will retry next run");
       continue; // don't mark expired if the object wasn't actually removed
     }
 
@@ -39,9 +44,9 @@ export async function sweepAbandonedSessions(): Promise<number> {
   let count = 0;
   for (const session of abandoned) {
     try {
-      await r2.abortMultipartUpload(session.r2Key, session.r2UploadId);
+      await storage.abortMultipartUpload(session.storageKey, session.storageUploadId);
     } catch (err) {
-      logger.warn({ err, sessionId: session.sessionId }, "Cleanup: R2 abort failed (object may not exist)");
+      logger.warn({ err, sessionId: session.sessionId }, "Cleanup: storage abort failed (object may not exist)");
     }
     await releaseReservation(session.reservationId as never);
     session.status = "aborted";
