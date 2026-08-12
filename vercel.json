@@ -1,27 +1,33 @@
 {
-  "services": {
-    "frontend": {
-      "root": "frontend",
-      "framework": "nextjs"
+  "version": 2,
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/next"
     },
-    "backend": {
-      "root": "backend"
+    {
+      "src": "backend/api/vercel.ts",
+      "use": "@vercel/node"
     }
-  },
+  ],
   "rewrites": [
     {
-      "source": "/api/backend(/(.*))?",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
+      "source": "/api/cron/cleanup",
+      "destination": "/backend/api/vercel.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/backend/api/vercel.ts"
     },
     {
       "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "frontend"
-      }
+      "destination": "/frontend/$1"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/cleanup",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
