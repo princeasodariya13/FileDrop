@@ -16,7 +16,8 @@ async function fetchFileInfo(fileId: string): Promise<{ file: FileInfoResponse |
   }
 }
 
-export default async function FilePage({ params }: { params: { fileId: string } }) {
-  const { file, error } = await fetchFileInfo(params.fileId);
+export default async function FilePage({ params }: { params: Promise<{ fileId: string }> }) {
+  const resolvedParams = await params;
+  const { file, error } = await fetchFileInfo(resolvedParams.fileId);
   return <DownloadView file={file} error={error} />;
 }
