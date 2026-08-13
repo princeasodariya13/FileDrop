@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { createUploadSession, completeUpload, abortUpload } from "@/lib/api/uploads";
+import { useCallback, useRef, useState, useEffect } from "react";
+import { createUploadSession, completeUpload, abortUpload, refreshPartUrls } from "@/lib/api/uploads";
 import { uploadPartWithProgress, ApiRequestError } from "@/lib/api/client";
 import { CompletedPart, UploadOptions, UploadProgressState } from "@/types/upload";
 
 const CONCURRENCY = 4;
-const MAX_RETRIES_PER_PART = 3;
 
 const initialState: UploadProgressState = {
   status: "idle",
@@ -21,10 +20,21 @@ const initialState: UploadProgressState = {
 export function useFileUpload() {
   const [state, setState] = useState<UploadProgressState>(initialState);
   const sessionIdRef = useRef<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const userCancelControllerRef = useRef<AbortController | null>(null);
+  const pauseControllerRef = useRef<AbortController | null>(null);
+
   const partProgressRef = useRef<Map<number, number>>(new Map());
   const speedSamplesRef = useRef<{ t: number; bytes: number }[]>([]);
   const lastUpdateRef = useRef<number>(0);
+
+  const completedPartsRef = useRef<Map<number, string>>(new Map());
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
+
+  // Expose refs for the worker pool to read current state
+  const isPausedRef = useRef<boolean>(false);
+  const queueRef = useRef<{ partNumber: number; presignedUrl: string }[]>([]);
+  const isUploadingRef = useRef<boolean>(false); // tracks if workers are currently running
 
   const updateProgress = useCallback((totalBytes: number) => {
     const uploaded = Array.from(partProgressRef.current.values()).reduce((a, b) => a + b, 0);
@@ -52,102 +62,241 @@ export function useFileUpload() {
     }));
   }, []);
 
+  // Shared file ref so online/offline event handlers can access it if needed
+  const fileRef = useRef<File | null>(null);
+  const partSizeRef = useRef<number>(0);
+
+  const startWorkers = useCallback(async () => {
+    if (isUploadingRef.current || isPausedRef.current || !fileRef.current || !sessionIdRef.current) return;
+    isUploadingRef.current = true;
+
+    pauseControllerRef.current = new AbortController();
+    const pauseSignal = pauseControllerRef.current.signal;
+    const cancelSignal = userCancelControllerRef.current?.signal;
+
+    const file = fileRef.current;
+    const partSize = partSizeRef.current;
+
+    async function uploadOnePart(part: { partNumber: number; presignedUrl: string }) {
+      if (completedPartsRef.current.has(part.partNumber)) {
+        partProgressRef.current.set(part.partNumber, Math.min(partSize, file.size - (part.partNumber - 1) * partSize));
+        return;
+      }
+
+      const start = (part.partNumber - 1) * partSize;
+      const end = Math.min(start + partSize, file.size);
+      const blob = file.slice(start, end);
+
+      let attempt = 0;
+      while (true) {
+        if (cancelSignal?.aborted) throw new Error("CANCELLED");
+        if (pauseSignal.aborted || isPausedRef.current) throw new Error("PAUSED");
+
+        try {
+          // Wait for any active URL refreshes
+          if (refreshPromiseRef.current) {
+            await refreshPromiseRef.current;
+            // Update URL from queueRef
+            const updatedPart = queueRef.current.find(p => p.partNumber === part.partNumber);
+            if (updatedPart) part.presignedUrl = updatedPart.presignedUrl;
+          }
+
+          // Combined signal to stop XHR on user cancel OR network pause
+          const xhrController = new AbortController();
+          const onCancelOrPause = () => xhrController.abort();
+          cancelSignal?.addEventListener("abort", onCancelOrPause);
+          pauseSignal.addEventListener("abort", onCancelOrPause);
+
+          const etag = await uploadPartWithProgress(
+            part.presignedUrl,
+            blob,
+            (loaded) => {
+              partProgressRef.current.set(part.partNumber, loaded);
+              const now = Date.now();
+              const isFinished = loaded >= blob.size;
+              if (isFinished || now - lastUpdateRef.current >= 250) {
+                lastUpdateRef.current = now;
+                updateProgress(file.size);
+              }
+            },
+            xhrController.signal
+          );
+
+          cancelSignal?.removeEventListener("abort", onCancelOrPause);
+          pauseSignal.removeEventListener("abort", onCancelOrPause);
+
+          completedPartsRef.current.set(part.partNumber, etag);
+          return;
+        } catch (err: any) {
+          if (cancelSignal?.aborted) throw new Error("CANCELLED");
+          if (pauseSignal.aborted || isPausedRef.current) throw new Error("PAUSED");
+
+          const msg = err.message || "";
+
+          // HTTP 403 Expired URL
+          if (msg.includes("status 403")) {
+            if (!refreshPromiseRef.current) {
+              refreshPromiseRef.current = refreshPartUrls(sessionIdRef.current!).then(res => {
+                queueRef.current = res.parts;
+              }).finally(() => {
+                refreshPromiseRef.current = null;
+              });
+            }
+            continue; // retry immediately after refresh
+          }
+
+          // Permanent 4xx errors
+          const statusMatch = msg.match(/status (\d{3})/);
+          if (statusMatch) {
+            const status = parseInt(statusMatch[1], 10);
+            if (status >= 400 && status < 500 && status !== 403 && status !== 408 && status !== 429) {
+              throw err; // permanent failure
+            }
+          }
+
+          attempt++;
+          const delay = Math.min(16000, 1000 * (2 ** (attempt - 1))); // 1s, 2s, 4s, 8s, 16s
+
+          if (!navigator.onLine) {
+            // If genuinely offline, just pause wait instead of spinning the backoff
+            throw new Error("PAUSED");
+          }
+
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    }
+
+    let cursor = 0;
+    async function worker() {
+      while (cursor < queueRef.current.length) {
+        if (cancelSignal?.aborted || pauseSignal.aborted || isPausedRef.current) break;
+
+        const part = queueRef.current[cursor++];
+        if (completedPartsRef.current.has(part.partNumber)) {
+          partProgressRef.current.set(part.partNumber, Math.min(partSize, file.size - (part.partNumber - 1) * partSize));
+          continue;
+        }
+
+        try {
+          await uploadOnePart(part);
+        } catch (err: any) {
+          if (err.message === "PAUSED" || err.message === "CANCELLED") {
+            // Put it back in the queue for resume
+            cursor--;
+            break;
+          }
+          throw err;
+        }
+      }
+    }
+
+    try {
+      const activeWorkers = Array.from({ length: Math.min(CONCURRENCY, queueRef.current.length) }, worker);
+      await Promise.all(activeWorkers);
+
+      if (cancelSignal?.aborted) return;
+      if (pauseSignal.aborted || isPausedRef.current) return;
+
+      // Verify all expected parts completed
+      const totalExpected = queueRef.current.length;
+      if (completedPartsRef.current.size !== totalExpected) {
+        throw new Error("Missing parts. Cannot complete.");
+      }
+      for (let i = 1; i <= totalExpected; i++) {
+        if (!completedPartsRef.current.has(i)) {
+          throw new Error(`Missing part ${i}. Cannot complete.`);
+        }
+      }
+
+      setState((s) => ({ ...s, status: "completing" }));
+
+      const partsToComplete = Array.from(completedPartsRef.current.entries())
+        .map(([partNumber, etag]) => ({ partNumber, etag }))
+        .sort((a, b) => a.partNumber - b.partNumber);
+
+      const result = await completeUpload(sessionIdRef.current, partsToComplete);
+      setState((s) => ({ ...s, status: "success", result }));
+    } catch (err: any) {
+      if (cancelSignal?.aborted || err.message === "CANCELLED") return;
+      if (pauseSignal.aborted || isPausedRef.current || err.message === "PAUSED") return;
+
+      const message = err instanceof ApiRequestError ? err.message : "Upload failed. Your file has not been saved.";
+      setState((s) => ({ ...s, status: "failed", errorMessage: message }));
+    } finally {
+      isUploadingRef.current = false;
+    }
+  }, [updateProgress]);
+
   const upload = useCallback(
     async (file: File, options: UploadOptions) => {
+      userCancelControllerRef.current = new AbortController();
       partProgressRef.current = new Map();
+      completedPartsRef.current = new Map();
       speedSamplesRef.current = [];
-      abortControllerRef.current = new AbortController();
-      const signal = abortControllerRef.current.signal;
+      isPausedRef.current = false;
+      isUploadingRef.current = false;
+      fileRef.current = file;
 
       try {
         setState({ ...initialState, status: "validating", totalBytes: file.size });
-
         setState((s) => ({ ...s, status: "reserving" }));
+
         const session = await createUploadSession(file, options);
         sessionIdRef.current = session.sessionId;
+        queueRef.current = session.parts;
+        partSizeRef.current = session.partSizeBytes;
 
         setState((s) => ({ ...s, status: "uploading" }));
+        startWorkers();
 
-        const completedParts: CompletedPart[] = [];
-        const queue = [...session.parts];
-
-        async function uploadOnePart(part: { partNumber: number; presignedUrl: string }) {
-          const start = (part.partNumber - 1) * session.partSizeBytes;
-          const end = Math.min(start + session.partSizeBytes, file.size);
-          const blob = file.slice(start, end);
-
-          let attempt = 0;
-          while (true) {
-            try {
-              const etag = await uploadPartWithProgress(
-                part.presignedUrl,
-                blob,
-                (loaded) => {
-                  partProgressRef.current.set(part.partNumber, loaded);
-                  const now = Date.now();
-                  const isFinished = loaded >= blob.size;
-                  if (isFinished || now - lastUpdateRef.current >= 250) {
-                    lastUpdateRef.current = now;
-                    updateProgress(file.size);
-                  }
-                },
-                signal
-              );
-              completedParts.push({ partNumber: part.partNumber, etag });
-              return;
-            } catch (err) {
-              if (signal.aborted) throw err;
-              attempt++;
-              if (attempt > MAX_RETRIES_PER_PART) throw err;
-              await new Promise((r) => setTimeout(r, 500 * attempt)); // backoff
-            }
-          }
-        }
-
-        // Simple concurrency pool.
-        let cursor = 0;
-        async function worker() {
-          while (cursor < queue.length) {
-            const part = queue[cursor++];
-            await uploadOnePart(part);
-          }
-        }
-        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
-
-        setState((s) => ({ ...s, status: "completing" }));
-        const result = await completeUpload(session.sessionId, completedParts);
-
-        setState((s) => ({ ...s, status: "success", result }));
-        return result;
-      } catch (err) {
-        if (signal.aborted) {
+      } catch (err: any) {
+        if (userCancelControllerRef.current?.signal.aborted) {
           setState((s) => ({ ...s, status: "cancelled" }));
           return;
         }
-        const message =
-          err instanceof ApiRequestError
-            ? err.message
-            : "Upload failed. Your file has not been saved.";
-        setState((s) => ({ ...s, status: "failed", errorMessage: message }));
-        // Best-effort cleanup so the storage reservation isn't held until it expires.
-        if (sessionIdRef.current) {
-          abortUpload(sessionIdRef.current).catch(() => {});
-        }
-        throw err;
+        setState((s) => ({ ...s, status: "failed", errorMessage: err.message || "Failed to start upload." }));
       }
     },
-    [updateProgress]
+    [startWorkers]
   );
 
+  useEffect(() => {
+    const handleOffline = () => {
+      if (isUploadingRef.current) {
+        isPausedRef.current = true;
+        pauseControllerRef.current?.abort();
+        setState((prev) => prev.status === "uploading" ? { ...prev, status: "paused" } : prev);
+      }
+    };
+    const handleOnline = () => {
+      if (isPausedRef.current && sessionIdRef.current) {
+        isPausedRef.current = false;
+        setState((prev) => prev.status === "paused" ? { ...prev, status: "uploading" } : prev);
+        startWorkers();
+      }
+    };
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [startWorkers]);
+
   const cancel = useCallback(() => {
-    abortControllerRef.current?.abort();
+    userCancelControllerRef.current?.abort();
+    pauseControllerRef.current?.abort();
     if (sessionIdRef.current) {
       abortUpload(sessionIdRef.current).catch(() => {});
     }
+    setState((s) => ({ ...s, status: "cancelled" }));
   }, []);
 
   const reset = useCallback(() => {
     sessionIdRef.current = null;
+    fileRef.current = null;
     setState(initialState);
   }, []);
 

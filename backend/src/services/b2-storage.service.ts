@@ -99,11 +99,13 @@ export class B2StorageService implements IStorageService {
         Key: key,
         UploadId: uploadId,
         MultipartUpload: {
-          Parts: parts.map((p) => ({
-            PartNumber: p.partNumber,
-            // Ensure ETags are properly quoted if they aren't already, B2 S3 API expects them
-            ETag: p.etag.includes('"') ? p.etag : `"${p.etag}"`,
-          })),
+          Parts: [...parts]
+            .sort((a, b) => a.partNumber - b.partNumber)
+            .map((p) => ({
+              PartNumber: p.partNumber,
+              // Ensure ETags are properly quoted if they aren't already, B2 S3 API expects them
+              ETag: p.etag.includes('"') ? p.etag : `"${p.etag}"`,
+            })),
         },
       });
       await this.client.send(command);

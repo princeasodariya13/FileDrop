@@ -4,6 +4,7 @@ export type UploadStatus =
   | "reserving"
   | "initializing"
   | "uploading"
+  | "paused"
   | "completing"
   | "success"
   | "failed"
