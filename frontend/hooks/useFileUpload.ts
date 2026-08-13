@@ -24,6 +24,7 @@ export function useFileUpload() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const partProgressRef = useRef<Map<number, number>>(new Map());
   const speedSamplesRef = useRef<{ t: number; bytes: number }[]>([]);
+  const lastUpdateRef = useRef<number>(0);
 
   const updateProgress = useCallback((totalBytes: number) => {
     const uploaded = Array.from(partProgressRef.current.values()).reduce((a, b) => a + b, 0);
@@ -83,7 +84,12 @@ export function useFileUpload() {
                 blob,
                 (loaded) => {
                   partProgressRef.current.set(part.partNumber, loaded);
-                  updateProgress(file.size);
+                  const now = Date.now();
+                  const isFinished = loaded >= blob.size;
+                  if (isFinished || now - lastUpdateRef.current >= 250) {
+                    lastUpdateRef.current = now;
+                    updateProgress(file.size);
+                  }
                 },
                 signal
               );
