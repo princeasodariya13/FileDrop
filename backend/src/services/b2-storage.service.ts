@@ -42,6 +42,8 @@ export class B2StorageService implements IStorageService {
       },
       // B2 S3 compatibility requires this to ensure paths are correct
       forcePathStyle: true,
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
     });
   }
 
