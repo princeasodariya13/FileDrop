@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { UploadOptions } from "@/types/upload";
 import { formatBytes } from "@/utils/format";
 
-const DEFAULT_OPTIONS: UploadOptions = { expirationHours: 24, downloadLimit: null };
+const DEFAULT_OPTIONS: UploadOptions = { expirationSeconds: 3600, downloadLimit: null };
 
 export function UploadFlow() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);

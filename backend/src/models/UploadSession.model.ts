@@ -20,7 +20,8 @@ export interface IUploadSession extends Document {
   status: UploadSessionStatus;
   reservationId: Types.ObjectId;
   downloadLimit: number | null;
-  expirationHours: number;
+  expirationHours?: number; // legacy backward compatibility
+  expirationSeconds?: number;
   clientIp: string;
   createdAt: Date;
   updatedAt: Date;
@@ -44,7 +45,8 @@ const UploadSessionSchema = new Schema<IUploadSession>(
     },
     reservationId: { type: Schema.Types.ObjectId, ref: "StorageReservation", required: true },
     downloadLimit: { type: Number, default: null },
-    expirationHours: { type: Number, required: true },
+    expirationHours: { type: Number, required: false },
+    expirationSeconds: { type: Number, required: false },
     clientIp: { type: String, required: true },
   },
   { timestamps: true }

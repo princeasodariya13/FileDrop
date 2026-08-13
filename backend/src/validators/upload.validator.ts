@@ -9,7 +9,7 @@ export const createUploadSessionSchema = z.object({
     .positive()
     .max(env.maxFileSizeBytes, { message: "File exceeds the maximum allowed size." }),
   mimeType: z.string().min(1).max(255),
-  expirationHours: z.number().int().positive().max(env.maxExpirationHours).optional(),
+  expirationSeconds: z.number().int().refine((val) => [60, 900, 1800, 2700, 3600, 7200].includes(val), { message: "Invalid expiration duration." }).optional(),
   downloadLimit: z.number().int().positive().max(1000).nullable().optional(),
 });
 

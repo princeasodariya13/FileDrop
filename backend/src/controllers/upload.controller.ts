@@ -41,7 +41,7 @@ export async function createUploadSession(req: Request, res: Response, next: Nex
         status: "uploading",
         reservationId: reservation._id,
         downloadLimit: input.downloadLimit ?? null,
-        expirationHours: input.expirationHours ?? env.defaultExpirationHours,
+        expirationSeconds: input.expirationSeconds ?? 3600, // default 1 hour
         clientIp: req.ip ?? "unknown",
       });
 
@@ -106,7 +106,13 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
 
     const fileId = session.storageKey.split("/")[1];
     const sanitizedName = sanitizeFilename(session.originalName);
-    const expiresAt = new Date(Date.now() + session.expirationHours * 60 * 60 * 1000);
+    
+    // Safely support new expirationSeconds and legacy expirationHours uploads.
+    const durationMs = session.expirationSeconds 
+      ? session.expirationSeconds * 1000 
+      : (session.expirationHours ?? env.defaultExpirationHours) * 60 * 60 * 1000;
+    
+    const expiresAt = new Date(Date.now() + durationMs);
 
     const possessionToken = crypto.randomBytes(32).toString("hex");
 

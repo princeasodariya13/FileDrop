@@ -67,10 +67,10 @@ export async function runCleanupPass(): Promise<void> {
 }
 
 export function scheduleCleanupJob() {
-  // Every 5 minutes.
-  const task = cron.schedule("*/5 * * * *", () => {
+  // Every 1 minute.
+  const task = cron.schedule("* * * * *", () => {
     runCleanupPass().catch((err) => logger.error({ err }, "Cleanup pass threw"));
   });
-  logger.info("Cleanup job scheduled (every 5 minutes)");
+  logger.info("Cleanup job scheduled (every 1 minute)");
   return task;
 }

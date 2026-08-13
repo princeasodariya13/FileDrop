@@ -3,9 +3,12 @@
 import { UploadOptions } from "@/types/upload";
 
 const EXPIRATION_CHOICES = [
-  { label: "1 hour", hours: 1 },
-  { label: "24 hours", hours: 24 },
-  { label: "7 days", hours: 168 },
+  { label: "1 minute", value: 60 },
+  { label: "15 minutes", value: 900 },
+  { label: "30 minutes", value: 1800 },
+  { label: "45 minutes", value: 2700 },
+  { label: "1 hour", value: 3600 },
+  { label: "2 hours", value: 7200 },
 ];
 
 const DOWNLOAD_LIMIT_CHOICES = [
@@ -28,12 +31,12 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
         <div className="flex gap-2 flex-wrap">
           {EXPIRATION_CHOICES.map((choice) => (
             <button
-              key={choice.hours}
+              key={choice.value}
               type="button"
-              aria-pressed={value.expirationHours === choice.hours}
-              onClick={() => onChange({ ...value, expirationHours: choice.hours })}
+              aria-pressed={value.expirationSeconds === choice.value}
+              onClick={() => onChange({ ...value, expirationSeconds: choice.value })}
               className={`focus-ring rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
-                value.expirationHours === choice.hours
+                value.expirationSeconds === choice.value
                   ? "border-accent-400 bg-brand-500/20 text-accent-100 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-[1.02]"
                   : "border-white/10 bg-white/5 text-ink-300 hover:border-brand-400/50 hover:bg-white/10 hover:text-ink-100"
               }`}

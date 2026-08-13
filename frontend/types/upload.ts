@@ -54,7 +54,7 @@ export interface ApiErrorBody {
 }
 
 export interface UploadOptions {
-  expirationHours: number;
+  expirationSeconds: number;
   downloadLimit: number | null;
 }
 

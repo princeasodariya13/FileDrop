@@ -11,7 +11,7 @@ export async function createUploadSession(
       fileName: file.name,
       sizeBytes: file.size,
       mimeType: file.type || "application/octet-stream",
-      expirationHours: options.expirationHours,
+      expirationSeconds: options.expirationSeconds,
       downloadLimit: options.downloadLimit,
     }),
   });
