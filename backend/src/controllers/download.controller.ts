@@ -19,6 +19,13 @@ export async function getFileInfo(req: Request, res: Response, next: NextFunctio
     if (file.downloadLimit !== null && file.downloadCount >= file.downloadLimit) {
       throw new ApiError(410, "DOWNLOAD_LIMIT_REACHED", "This download link is no longer available.");
     }
+    if (!file.firstAccessedAt) {
+      await FileModel.updateOne(
+        { _id: file._id, firstAccessedAt: null },
+        { $set: { firstAccessedAt: new Date() } }
+      );
+      logger.info({ fileId: file.fileId }, "First receiver access recorded");
+    }
 
     return ok(res, {
       fileId: file.fileId,
