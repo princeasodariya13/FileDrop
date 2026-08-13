@@ -14,8 +14,7 @@ export interface IFile extends Document {
   downloadLimit: number | null; // null = unlimited
   downloadCount: number;
   expiresAt: Date;
-  firstAccessedAt: Date | null;
-  noAccessCleanupAt: Date | null;
+  inactivityTimerStartsAt: Date;
   reservationId: Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
@@ -39,8 +38,7 @@ const FileSchema = new Schema<IFile>(
     downloadLimit: { type: Number, default: null, min: 1 },
     downloadCount: { type: Number, default: 0, min: 0 },
     expiresAt: { type: Date, required: true },
-    firstAccessedAt: { type: Date, default: null },
-    noAccessCleanupAt: { type: Date, default: null },
+    inactivityTimerStartsAt: { type: Date, required: true },
     reservationId: { type: Schema.Types.ObjectId, ref: "StorageReservation", default: null },
   },
   { timestamps: true }

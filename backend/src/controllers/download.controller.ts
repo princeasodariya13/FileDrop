@@ -19,13 +19,6 @@ export async function getFileInfo(req: Request, res: Response, next: NextFunctio
     if (file.downloadLimit !== null && file.downloadCount >= file.downloadLimit) {
       throw new ApiError(410, "DOWNLOAD_LIMIT_REACHED", "This download link is no longer available.");
     }
-    if (!file.firstAccessedAt) {
-      await FileModel.updateOne(
-        { _id: file._id, firstAccessedAt: null },
-        { $set: { firstAccessedAt: new Date() } }
-      );
-      logger.info({ fileId: file.fileId }, "First receiver access recorded");
-    }
 
     return ok(res, {
       fileId: file.fileId,
@@ -86,6 +79,16 @@ export async function generateDownload(req: Request, res: Response, next: NextFu
       await file.save();
     }
 
+    const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
+    const { generateSessionId } = await import("@/utils/ids");
+    const sessionId = generateSessionId();
+    await DownloadSessionModel.create({
+      sessionId,
+      fileId: file._id,
+      leaseUntil: new Date(Date.now() + 5 * 60 * 1000), // 5 minute grace
+      status: "active",
+    });
+
     const ipHash = crypto.createHash("sha256").update(req.ip ?? "unknown").digest("hex");
     await DownloadEventModel.create({
       fileId: file._id,
@@ -93,9 +96,9 @@ export async function generateDownload(req: Request, res: Response, next: NextFu
       userAgent: req.get("user-agent") ?? "",
     });
 
-    logger.info({ fileId: file.fileId }, "Download URL issued");
+    logger.info({ fileId: file.fileId, downloadSessionId: sessionId }, "Download URL issued and session started");
 
-    return ok(res, { downloadUrl: presignedUrl, fileName: file.originalName });
+    return ok(res, { downloadUrl: presignedUrl, fileName: file.originalName, sessionId });
   } catch (err) {
     next(err);
   }
@@ -124,6 +127,24 @@ export async function deleteFile(req: Request, res: Response, next: NextFunction
     await releaseActiveStorage(file.sizeBytes);
 
     return ok(res, { fileId: file.fileId, status: "deleted" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** POST /api/downloads/:sessionId/heartbeat — extend the download lease */
+export async function downloadHeartbeat(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
+    const session = await DownloadSessionModel.findOneAndUpdate(
+      { sessionId: req.params.sessionId, status: "active" },
+      { $set: { leaseUntil: new Date(Date.now() + 5 * 60 * 1000) } },
+      { new: true }
+    );
+    if (!session) {
+      throw new ApiError(404, "SESSION_NOT_FOUND", "Active download session not found.");
+    }
+    return ok(res, { status: "active", leaseUntil: session.leaseUntil });
   } catch (err) {
     next(err);
   }

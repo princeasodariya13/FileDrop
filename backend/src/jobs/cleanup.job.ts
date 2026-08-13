@@ -8,21 +8,34 @@ import { logger } from "@/utils/logger";
 /** Expire files whose expiresAt has passed: delete storage object, release storage, mark expired. */
 export async function expireOverdueFiles(): Promise<number> {
   const overdue = await FileModel.find({
-    $or: [
-      { status: "active", expiresAt: { $lt: new Date() } },
-      { status: "exhausted" },
-    ],
+    status: { $in: ["active", "exhausted"] },
+    expiresAt: { $lt: new Date() },
   }).limit(200);
   let count = 0;
 
+  const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
+
   for (const file of overdue) {
+    // 1. Fresh check for active download sessions
+    if (file.status === "active") {
+      const activeSessions = await DownloadSessionModel.countDocuments({
+        fileId: file._id,
+        status: "active"
+      });
+      if (activeSessions > 0) {
+        // Protect the file while download is active.
+        continue;
+      }
+    }
+
     try {
       await storage.deleteObject(file.storageKey);
     } catch (err) {
       logger.error({ err, fileId: file.fileId }, "Cleanup: failed to delete storage object, will retry next run");
-      continue; // don't mark expired if the object wasn't actually removed
+      continue;
     }
 
+    const { releaseActiveStorage } = await import("@/services/storageReservation.service");
     await releaseActiveStorage(file.sizeBytes);
     file.status = "expired";
     await file.save();
@@ -56,31 +69,66 @@ export async function sweepAbandonedSessions(): Promise<number> {
   return count;
 }
 
-export async function expireNoAccessFiles(): Promise<number> {
+export async function sweepStaleDownloadSessions(): Promise<number> {
+  const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
   const now = new Date();
+
+  const staleSessions = await DownloadSessionModel.find({
+    status: "active",
+    leaseUntil: { $lt: now }
+  }).limit(500);
+
+  let count = 0;
+  for (const session of staleSessions) {
+    session.status = "stale";
+    await session.save();
+
+    // Check if THIS was the absolute last active session for this file
+    const otherActive = await DownloadSessionModel.countDocuments({
+      fileId: session.fileId,
+      status: "active"
+    });
+
+    if (otherActive === 0) {
+      // The LAST active session became stale. Restart the 2-hour inactivity timer.
+      await FileModel.updateOne(
+        { _id: session.fileId },
+        { $set: { inactivityTimerStartsAt: now } }
+      );
+    }
+    count++;
+  }
+  return count;
+}
+
+export async function expireNoAccessFiles(): Promise<number> {
+  const staleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
+  const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
 
   const overdue = await FileModel.find({
     status: "active",
-    firstAccessedAt: null,
-    noAccessCleanupAt: { $exists: true, $ne: null, $lte: now },
+    inactivityTimerStartsAt: { $lte: staleThreshold },
   }).limit(200);
 
   let count = 0;
   for (const file of overdue) {
-    // Final fresh document check to prevent race condition if accessed during cleanup
-    const stillUnaccessed = await FileModel.findOne({ _id: file._id, firstAccessedAt: null, status: "active" });
-    if (!stillUnaccessed) {
+    // FRESH CHECK: Are there any newly started active download sessions?
+    const activeSessions = await DownloadSessionModel.countDocuments({
+      fileId: file._id,
+      status: "active"
+    });
+    if (activeSessions > 0) {
+      // Receiver started a download just in time. Skip deletion!
       continue;
     }
 
     try {
       await storage.deleteObject(file.storageKey);
     } catch (err) {
-      logger.error({ err, fileId: file.fileId }, "Cleanup: failed to delete storage object (no-access), will retry next run");
+      logger.error({ err, fileId: file.fileId }, "Cleanup: failed to delete storage object (inactivity), will retry next run");
       continue;
     }
 
-    // B2 deletion succeeded, finalize cleanup
     const { releaseActiveStorage } = await import("@/services/storageReservation.service");
     await releaseActiveStorage(file.sizeBytes);
 
@@ -91,9 +139,8 @@ export async function expireNoAccessFiles(): Promise<number> {
     logger.info({
       fileId: file.fileId,
       storageKey: file.storageKey,
-      uploadedAt: file.createdAt,
-      noAccessCleanupAt: file.noAccessCleanupAt
-    }, "File automatically deleted because it was uploaded successfully but never accessed within the 2-hour grace period.");
+      inactivityTimerStartsAt: file.inactivityTimerStartsAt
+    }, "File automatically deleted due to 2-hour inactivity period.");
   }
 
   return count;
@@ -101,13 +148,14 @@ export async function expireNoAccessFiles(): Promise<number> {
 
 /** Runs the full cleanup pass. Safe to call repeatedly/concurrently — every step is idempotent. */
 export async function runCleanupPass(): Promise<void> {
-  const [expired, abandoned, reclaimed, noAccess] = await Promise.all([
+  const [expired, abandoned, reclaimed, staleDown, noAccess] = await Promise.all([
     expireOverdueFiles(),
     sweepAbandonedSessions(),
     reclaimExpiredReservations(),
+    sweepStaleDownloadSessions(),
     expireNoAccessFiles(),
   ]);
-  logger.info({ expired, abandoned, reclaimed, noAccess }, "Cleanup pass complete");
+  logger.info({ expired, abandoned, reclaimed, staleDown, noAccess }, "Cleanup pass complete");
 }
 
 export function scheduleCleanupJob() {

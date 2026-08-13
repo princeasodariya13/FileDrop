@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatBytes, formatRelativeExpiry } from "@/utils/format";
@@ -12,15 +12,32 @@ import { ToastProvider, useToast } from "@/components/ui/Toast";
 function DownloadCard({ file }: { file: FileInfoResponse }) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const { push } = useToast();
+
+  // Cleanup heartbeat on unmount
+  useEffect(() => {
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
+  }, []);
 
   async function handleDownload() {
     setIsDownloading(true);
     setError(null);
     try {
-      const { downloadUrl } = await getDownloadUrl(file.fileId);
+      const { downloadUrl, sessionId } = await getDownloadUrl(file.fileId);
       window.location.href = downloadUrl;
       push("Your download is starting", "success");
+
+      // Start 60-second heartbeat to keep the download lease alive
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      heartbeatRef.current = setInterval(() => {
+        import("@/lib/api/files").then(({ sendHeartbeat }) => {
+          sendHeartbeat(sessionId).catch(() => {});
+        });
+      }, 60000);
+
     } catch (err) {
       const message =
         err instanceof ApiRequestError ? err.message : "Couldn't start the download. Please try again.";

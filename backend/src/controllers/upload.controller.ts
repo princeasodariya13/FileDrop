@@ -114,7 +114,6 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
     
     const uploadedAt = new Date();
     const expiresAt = new Date(uploadedAt.getTime() + durationMs);
-    const noAccessCleanupAt = new Date(uploadedAt.getTime() + 2 * 60 * 60 * 1000);
 
     const possessionToken = crypto.randomBytes(32).toString("hex");
 
@@ -130,8 +129,7 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
       downloadLimit: session.downloadLimit,
       downloadCount: 0,
       expiresAt,
-      firstAccessedAt: null,
-      noAccessCleanupAt,
+      inactivityTimerStartsAt: uploadedAt,
       reservationId: session.reservationId,
     });
 
