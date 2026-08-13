@@ -31,11 +31,10 @@ export const env = {
 
   mongoUri: required("MONGODB_URI", "mongodb://localhost:27017/filedrop"),
 
-  r2AccountId: process.env.R2_ACCOUNT_ID ?? "",
-  r2AccessKeyId: process.env.R2_ACCESS_KEY_ID ?? "",
-  r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? "",
-  r2BucketName: process.env.R2_BUCKET_NAME ?? "",
-  r2Endpoint: process.env.R2_ENDPOINT ?? "",
+  b2KeyId: process.env.B2_KEY_ID ?? "",
+  b2ApplicationKey: process.env.B2_APPLICATION_KEY ?? "",
+  b2BucketName: process.env.B2_BUCKET_NAME ?? "FileDrop",
+  b2Endpoint: process.env.B2_ENDPOINT ?? "",
 
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "http://localhost:3000",
 
@@ -53,20 +52,19 @@ export const env = {
   rateLimitDownloadPerHour: parseInt(process.env.RATE_LIMIT_DOWNLOAD_PER_HOUR ?? "60", 10),
 };
 
-export function assertR2ConfigPresent(): void {
-  const r2Fields: Record<string, string> = {
-    r2AccountId: env.r2AccountId,
-    r2AccessKeyId: env.r2AccessKeyId,
-    r2SecretAccessKey: env.r2SecretAccessKey,
-    r2BucketName: env.r2BucketName,
-    r2Endpoint: env.r2Endpoint,
+export function assertB2ConfigPresent(): void {
+  const b2Fields: Record<string, string> = {
+    b2KeyId: env.b2KeyId,
+    b2ApplicationKey: env.b2ApplicationKey,
+    b2BucketName: env.b2BucketName,
+    b2Endpoint: env.b2Endpoint,
   };
-  const missing = Object.entries(r2Fields)
+  const missing = Object.entries(b2Fields)
     .filter(([, value]) => !value)
     .map(([key]) => key);
   if (missing.length > 0) {
     throw new Error(
-      `Cloudflare R2 is not configured. Missing: ${missing.join(", ")}. See .env.example.`
+      `Backblaze B2 is not configured. Missing: ${missing.join(", ")}. See .env.example.`
     );
   }
 }

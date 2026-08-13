@@ -57,6 +57,9 @@ export class MockStorageService implements IStorageService {
   }
 }
 
-// Storage abstraction layer: Do NOT execute Cloudflare R2 yet.
-// For now, use the MockStorageService to keep the backend provider-independent.
-export const storage: IStorageService = new MockStorageService();
+import { B2StorageService } from "./b2-storage.service";
+
+// Storage abstraction layer
+// Use MockStorageService for tests/dev (unless overridden) and B2 for production.
+export const storage: IStorageService =
+  env.nodeEnv === "production" ? new B2StorageService() : new MockStorageService();
