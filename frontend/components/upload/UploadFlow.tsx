@@ -49,13 +49,20 @@ export function UploadFlow() {
       <Dropzone onFileSelected={setSelectedFile} disabled={isBusy} />
 
       {selectedFile && (
-        <div className="rounded-card border border-ink-100 bg-white p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-ink-900">{selectedFile.name}</p>
-              <p className="text-xs text-ink-400">{formatBytes(selectedFile.size)}</p>
+        <div className="rounded-card p-6 space-y-6 animate-fade-in-scale">
+          <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-500/20 text-brand-400">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M13 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V9L13 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-ink-50">{selectedFile.name}</p>
+                <p className="text-xs text-ink-400 font-mono mt-0.5">{formatBytes(selectedFile.size)}</p>
+              </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedFile(null)}>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedFile(null)} className="ml-4 hover:text-red-400 hover:bg-red-500/10">
               Remove
             </Button>
           </div>

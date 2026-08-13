@@ -64,27 +64,35 @@ export function Dropzone({ onFileSelected, disabled }: DropzoneProps) {
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
         className={clsx(
-          "focus-ring flex flex-col items-center justify-center gap-3 rounded-card border-2 border-dashed px-6 py-16 text-center transition-colors cursor-pointer",
-          isDragging ? "border-brand-500 bg-brand-50" : "border-ink-100 bg-white hover:border-brand-400",
+          "focus-ring relative overflow-hidden flex flex-col items-center justify-center gap-4 rounded-card border-2 border-dashed px-6 py-20 text-center cursor-pointer group",
+          "transition-all duration-300 ease-out",
+          isDragging 
+            ? "border-accent-400 bg-brand-500/10 shadow-[0_0_30px_rgba(99,102,241,0.2)]" 
+            : "border-white/10 bg-bg-panel hover:border-brand-500/50 hover:bg-brand-500/5",
           disabled && "cursor-not-allowed opacity-60"
         )}
       >
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-500">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+        
+        <div className={clsx(
+          "relative flex h-16 w-16 items-center justify-center rounded-2xl transition-transform duration-300",
+          isDragging ? "bg-accent-500/20 text-accent-400 scale-110" : "bg-white/5 text-ink-300 group-hover:bg-brand-500/20 group-hover:text-brand-400 group-hover:scale-105"
+        )}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true" className={clsx("transition-transform duration-300", isDragging ? "-translate-y-1" : "")}>
             <path
               d="M12 16V4M12 4L7 9M12 4L17 9M5 20H19"
               stroke="currentColor"
-              strokeWidth="1.8"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           </svg>
         </div>
-        <div>
-          <p className="text-sm font-medium text-ink-900">
-            Drag a file here, or <span className="text-brand-500">browse</span>
+        <div className="relative z-10">
+          <p className="text-lg font-medium text-ink-50 font-heading">
+            Drag a file here, or <span className="text-brand-400 group-hover:text-accent-400 transition-colors">browse</span>
           </p>
-          <p className="mt-1 text-xs text-ink-400">Up to 10GB · deleted automatically after expiration</p>
+          <p className="mt-2 text-sm text-ink-400">Up to 10GB · encrypted & secure</p>
         </div>
         <input
           ref={inputRef}

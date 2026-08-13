@@ -9,15 +9,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<string, string> = {
-  primary: "bg-brand-500 text-white hover:bg-brand-600 disabled:bg-ink-100 disabled:text-ink-400",
-  secondary: "bg-white text-ink-900 border border-ink-100 hover:bg-ink-50",
-  ghost: "bg-transparent text-ink-600 hover:bg-ink-100",
-  danger: "bg-white text-red-600 border border-red-200 hover:bg-red-50",
+  primary: "bg-btn-primary text-white disabled:opacity-50 disabled:bg-none disabled:bg-ink-800 disabled:text-ink-400 disabled:shadow-none",
+  secondary: "bg-white/5 text-ink-50 border border-white/10 hover:bg-white/10 backdrop-blur-md",
+  ghost: "bg-transparent text-ink-300 hover:text-white hover:bg-white/5",
+  danger: "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20",
 };
 
 const sizeClasses: Record<string, string> = {
-  sm: "h-8 px-3 text-sm",
-  md: "h-10 px-4 text-sm",
+  sm: "h-9 px-4 text-sm font-semibold rounded-xl",
+  md: "h-11 px-6 text-sm font-semibold rounded-xl",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

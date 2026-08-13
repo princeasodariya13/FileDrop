@@ -15,21 +15,27 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen flex flex-col font-sans">
-        <header className="border-b border-ink-100 bg-white">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
+      </head>
+      <body className="min-h-screen flex flex-col font-sans bg-bg-base text-ink-50 selection:bg-brand-500/30">
+        <header className="sticky top-0 z-50 bg-bg-base/60 backdrop-blur-xl border-b border-white/5">
           <div className="mx-auto max-w-5xl px-4 sm:px-6 py-4 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2 focus-ring rounded">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-[10px] bg-brand-500 text-white text-sm font-semibold">
+            <Link href="/" className="flex items-center gap-3 focus-ring rounded-lg group">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-btn-primary text-white text-base font-bold shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow">
                 F
               </span>
-              <span className="font-semibold text-ink-900">FileDrop</span>
+              <span className="font-heading font-semibold text-xl tracking-tight text-white group-hover:text-brand-50 transition-colors">FileDrop</span>
             </Link>
           </div>
         </header>
-        <main className="flex-1">{children}</main>
-        <footer className="border-t border-ink-100 py-6">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 text-sm text-ink-400">
-            Files are automatically deleted after they expire.
+        <main className="flex-1 relative z-10">{children}</main>
+        <footer className="border-t border-white/5 py-8 mt-auto relative z-10">
+          <div className="mx-auto max-w-5xl px-4 sm:px-6 text-sm text-ink-400 text-center flex flex-col items-center gap-2">
+            <p>Files are automatically deleted after they expire.</p>
+            <p className="text-xs text-ink-600">Secure • Fast • Simple</p>
           </div>
         </footer>
       </body>

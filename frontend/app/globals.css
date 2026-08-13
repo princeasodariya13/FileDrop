@@ -1,39 +1,67 @@
 @import "tailwindcss";
 
 @theme {
-  /* Brand palette */
-  --color-brand-50: #f4f6fb;
-  --color-brand-100: #e6eaf5;
-  --color-brand-400: #5b6ee8;
-  --color-brand-500: #3d4fd6;
-  --color-brand-600: #2f3fb8;
-  --color-brand-900: #1b2054;
+  /* Premium Dark Palette */
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-900: #312e81;
+  
+  --color-accent-400: #c084fc;
+  --color-accent-500: #a855f7;
 
-  /* Ink (neutral) palette */
-  --color-ink-50: #f7f7f8;
-  --color-ink-100: #eceded;
-  --color-ink-400: #7a7d85;
-  --color-ink-600: #4b4e57;
-  --color-ink-900: #15161a;
+  /* Ink (neutral) palette - Dark Mode */
+  --color-ink-50: #fafafa;
+  --color-ink-100: #f4f4f5;
+  --color-ink-300: #d4d4d8;
+  --color-ink-400: #a1a1aa;
+  --color-ink-600: #52525b;
+  --color-ink-800: #27272a;
+  --color-ink-900: #18181b;
+  
+  /* Backgrounds */
+  --color-bg-base: #050507;
+  --color-bg-panel: rgba(20, 20, 24, 0.6);
 
   /* Font families */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-heading: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
 
   /* Border radius */
-  --radius-card: 10px;
+  --radius-card: 16px;
 }
 
 /* Base styles */
 body {
-  background-color: var(--color-ink-50);
-  color: var(--color-ink-900);
+  background-color: var(--color-bg-base);
+  color: var(--color-ink-50);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.12), transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(168, 85, 247, 0.12), transparent 25%);
+  background-attachment: fixed;
 }
 
 * {
-  border-color: var(--color-ink-100);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Typography utilities */
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+/* Premium Card */
+.rounded-card {
+  border-radius: var(--radius-card);
+  background-color: var(--color-bg-panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Focus ring utility */
@@ -41,6 +69,38 @@ body {
   outline: none;
 }
 .focus-ring:focus-visible {
-  outline: 2px solid var(--color-brand-500);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-accent-400);
+  outline-offset: 3px;
+}
+
+/* Premium button gradients */
+.bg-btn-primary {
+  background: linear-gradient(135deg, var(--color-brand-500) 0%, var(--color-accent-500) 100%);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bg-btn-primary:hover {
+  background: linear-gradient(135deg, var(--color-brand-400) 0%, var(--color-accent-400) 100%);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+  transform: translateY(-1px);
+}
+.bg-btn-primary:active {
+  transform: translateY(1px);
+}
+
+/* Animations */
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-fade-in-scale {
+  animation: fadeInScale 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

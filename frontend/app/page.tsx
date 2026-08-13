@@ -3,11 +3,13 @@ import { ToastProvider } from "@/components/ui/Toast";
 
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 sm:px-6 py-16">
-      <div className="mb-8 text-center">
-        <h1 className="text-2xl font-semibold text-ink-900">Send large files, simply</h1>
-        <p className="mt-2 text-sm text-ink-400">
-          Drop a file, choose when it expires, share the link. Up to 10GB.
+    <div className="mx-auto max-w-2xl px-4 sm:px-6 py-16 lg:py-24 animate-fade-in-scale">
+      <div className="mb-10 text-center">
+        <h1 className="text-4xl md:text-5xl font-bold font-heading text-white tracking-tight">
+          Send large files, <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-accent-400">simply</span>
+        </h1>
+        <p className="mt-4 text-base text-ink-300 max-w-lg mx-auto leading-relaxed">
+          Drop a file, choose when it expires, share the link. Secure, fast, and up to 10GB.
         </p>
       </div>
       <ToastProvider>

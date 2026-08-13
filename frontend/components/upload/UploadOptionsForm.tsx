@@ -24,7 +24,7 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <fieldset disabled={disabled}>
-        <legend className="text-xs font-medium text-ink-600 mb-1.5">Expires in</legend>
+        <legend className="text-xs font-semibold text-ink-300 mb-2 uppercase tracking-wider">Expires in</legend>
         <div className="flex gap-2 flex-wrap">
           {EXPIRATION_CHOICES.map((choice) => (
             <button
@@ -32,10 +32,10 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
               type="button"
               aria-pressed={value.expirationHours === choice.hours}
               onClick={() => onChange({ ...value, expirationHours: choice.hours })}
-              className={`focus-ring rounded-card border px-3 py-1.5 text-sm transition-colors ${
+              className={`focus-ring rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
                 value.expirationHours === choice.hours
-                  ? "border-brand-500 bg-brand-50 text-brand-600"
-                  : "border-ink-100 bg-white text-ink-600 hover:border-brand-400"
+                  ? "border-accent-400 bg-brand-500/20 text-accent-100 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-[1.02]"
+                  : "border-white/10 bg-white/5 text-ink-300 hover:border-brand-400/50 hover:bg-white/10 hover:text-ink-100"
               }`}
             >
               {choice.label}
@@ -45,7 +45,7 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
       </fieldset>
 
       <fieldset disabled={disabled}>
-        <legend className="text-xs font-medium text-ink-600 mb-1.5">Download limit</legend>
+        <legend className="text-xs font-semibold text-ink-300 mb-2 uppercase tracking-wider">Download limit</legend>
         <div className="flex gap-2 flex-wrap">
           {DOWNLOAD_LIMIT_CHOICES.map((choice) => (
             <button
@@ -53,10 +53,10 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
               type="button"
               aria-pressed={value.downloadLimit === choice.value}
               onClick={() => onChange({ ...value, downloadLimit: choice.value })}
-              className={`focus-ring rounded-card border px-3 py-1.5 text-sm transition-colors ${
+              className={`focus-ring rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
                 value.downloadLimit === choice.value
-                  ? "border-brand-500 bg-brand-50 text-brand-600"
-                  : "border-ink-100 bg-white text-ink-600 hover:border-brand-400"
+                  ? "border-accent-400 bg-brand-500/20 text-accent-100 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-[1.02]"
+                  : "border-white/10 bg-white/5 text-ink-300 hover:border-brand-400/50 hover:bg-white/10 hover:text-ink-100"
               }`}
             >
               {choice.label}
