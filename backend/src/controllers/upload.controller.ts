@@ -138,7 +138,7 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
       sizeBytes: file.sizeBytes,
       expiresAt: file.expiresAt,
       downloadLimit: file.downloadLimit,
-      shareUrl: `${req.protocol}://${req.get("host")}/file/${file.fileId}`,
+      shareUrl: `${env.frontendOrigin}/file/${file.fileId}`,
       possessionToken,
     });
   } catch (err) {
