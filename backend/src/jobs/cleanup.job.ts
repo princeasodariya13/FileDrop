@@ -35,7 +35,6 @@ export async function expireOverdueFiles(): Promise<number> {
       continue;
     }
 
-    const { releaseActiveStorage } = await import("@/services/storageReservation.service");
     await releaseActiveStorage(file.sizeBytes);
     file.status = "expired";
     await file.save();
@@ -129,7 +128,6 @@ export async function expireNoAccessFiles(): Promise<number> {
       continue;
     }
 
-    const { releaseActiveStorage } = await import("@/services/storageReservation.service");
     await releaseActiveStorage(file.sizeBytes);
 
     file.status = "expired";
