@@ -26,7 +26,7 @@ export default function RootLayout({
           <div className="mx-auto max-w-5xl px-4 sm:px-6 py-4 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3 focus-ring rounded-lg group">
               <Image 
-                src="/logo.png" 
+                src="/logo.jpeg" 
                 alt="FileDrop Logo" 
                 width={36} 
                 height={36} 
