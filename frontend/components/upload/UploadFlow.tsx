@@ -65,7 +65,7 @@ export function UploadFlow() {
 
       {selectedFile && (
         <div className="rounded-card p-6 space-y-6 animate-fade-in-scale">
-          <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-4">
+          <div className="flex items-center justify-between bg-surface border border-surface-hover rounded-xl p-4">
             <div className="flex items-center gap-4 min-w-0">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-500/20 text-brand-400">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">

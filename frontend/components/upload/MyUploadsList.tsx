@@ -62,7 +62,7 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
   };
 
   return (
-    <Card className="p-4 bg-white/5 border border-white/10 relative overflow-hidden animate-fade-in-scale">
+    <Card className="p-4 bg-surface border border-surface-hover relative overflow-hidden animate-fade-in-scale">
       <div className="flex flex-col gap-4">
         <div>
           <h4 className="text-sm font-medium text-ink-50 truncate">{upload.fileName}</h4>
@@ -82,7 +82,7 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
               This will permanently remove the file and make its shared link unavailable to new receivers.
             </p>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setShowConfirm(false)} disabled={isDeleting} className="hover:bg-white/10">
+              <Button size="sm" variant="ghost" onClick={() => setShowConfirm(false)} disabled={isDeleting} className="hover:bg-surface-hover">
                 Cancel
               </Button>
               <Button size="sm" variant="ghost" onClick={handleDelete} disabled={isDeleting} className="bg-red-500/20 text-red-400 hover:bg-red-500/30">
@@ -91,7 +91,7 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between mt-2 pt-4 border-t border-white/5">
+          <div className="flex items-center justify-between mt-2 pt-4 border-t border-surface">
             <Button size="sm" variant="ghost" onClick={handleCopyLink} className="text-brand-400 hover:text-brand-300 hover:bg-brand-500/10">
               Copy Link
             </Button>

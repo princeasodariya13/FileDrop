@@ -29,7 +29,7 @@ export function UploadProgressView({ fileName, progress, onCancel }: Props) {
       <div className="absolute inset-0 bg-gradient-to-br from-brand-500/10 to-transparent pointer-events-none" />
       <div className="relative z-10 flex items-start justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/5 border border-white/10 animate-pulse">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface border border-surface-hover animate-pulse">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="17 8 12 3 7 8"/>
@@ -54,7 +54,7 @@ export function UploadProgressView({ fileName, progress, onCancel }: Props) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-label={`Upload progress: ${pct}%`}
-        className="relative mt-6 h-2 w-full overflow-hidden rounded-full bg-white/10"
+        className="relative mt-6 h-2 w-full overflow-hidden rounded-full bg-surface-hover"
       >
         <div
           className="absolute inset-y-0 left-0 h-full rounded-full bg-btn-primary transition-[width] duration-300 ease-out shadow-[0_0_10px_rgba(168,85,247,0.5)]"

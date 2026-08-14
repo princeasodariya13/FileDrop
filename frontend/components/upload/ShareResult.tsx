@@ -44,7 +44,7 @@ export function ShareResult({ result, onUploadAnother }: Props) {
         <span className="text-sm font-bold tracking-wide uppercase">Upload complete</span>
       </div>
 
-      <div className="relative z-10 mt-6 bg-white/5 border border-white/10 rounded-xl p-4">
+      <div className="relative z-10 mt-6 bg-surface border border-surface-hover rounded-xl p-4">
         <p className="truncate text-sm font-medium text-ink-50">{result.fileName}</p>
         <p className="mt-1 text-xs text-ink-400 font-mono">
           {formatBytes(result.sizeBytes)} <span className="text-ink-600 mx-1">•</span> expires {formatRelativeExpiry(result.expiresAt)}
@@ -58,14 +58,14 @@ export function ShareResult({ result, onUploadAnother }: Props) {
           value={result.shareUrl}
           aria-label="Share link"
           onFocus={(e) => e.currentTarget.select()}
-          className="focus-ring flex-1 truncate rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-brand-100 font-medium font-mono"
+          className="focus-ring flex-1 truncate rounded-xl border border-surface-hover bg-surface px-4 py-2.5 text-sm text-brand-500 font-medium font-mono"
         />
         <Button onClick={handleCopy} size="sm" className={copied ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]" : ""}>
           {copied ? "Copied" : "Copy"}
         </Button>
       </div>
 
-      <div className="relative z-10 mt-6 pt-6 border-t border-white/10">
+      <div className="relative z-10 mt-6 pt-6 border-t border-surface-hover">
         <Button variant="ghost" size="sm" onClick={onUploadAnother} className="w-full">
           Upload another file
         </Button>

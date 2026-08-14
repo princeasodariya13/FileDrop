@@ -68,7 +68,7 @@ export function Dropzone({ onFileSelected, disabled }: DropzoneProps) {
           "transition-all duration-300 ease-out",
           isDragging 
             ? "border-accent-400 bg-brand-500/10 shadow-[0_0_30px_rgba(99,102,241,0.2)]" 
-            : "border-white/10 bg-bg-panel hover:border-brand-500/50 hover:bg-brand-500/5",
+            : "border-surface-hover bg-bg-panel hover:border-brand-500/50 hover:bg-brand-500/5",
           disabled && "cursor-not-allowed opacity-60"
         )}
       >
@@ -76,7 +76,7 @@ export function Dropzone({ onFileSelected, disabled }: DropzoneProps) {
         
         <div className={clsx(
           "relative flex h-16 w-16 items-center justify-center rounded-2xl transition-transform duration-300",
-          isDragging ? "bg-accent-500/20 text-accent-400 scale-110" : "bg-white/5 text-ink-300 group-hover:bg-brand-500/20 group-hover:text-brand-400 group-hover:scale-105"
+          isDragging ? "bg-accent-500/20 text-accent-400 scale-110" : "bg-surface text-ink-300 group-hover:bg-brand-500/20 group-hover:text-brand-400 group-hover:scale-105"
         )}>
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true" className={clsx("transition-transform duration-300", isDragging ? "-translate-y-1" : "")}>
             <path
