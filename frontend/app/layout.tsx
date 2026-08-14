@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,9 +25,13 @@ export default function RootLayout({
         <header className="sticky top-0 z-50 bg-bg-base/60 backdrop-blur-xl border-b border-white/5">
           <div className="mx-auto max-w-5xl px-4 sm:px-6 py-4 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3 focus-ring rounded-lg group">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-btn-primary text-white text-base font-bold shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow">
-                F
-              </span>
+              <Image 
+                src="/logo.png" 
+                alt="FileDrop Logo" 
+                width={36} 
+                height={36} 
+                className="rounded-xl shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow object-cover" 
+              />
               <span className="font-heading font-semibold text-xl tracking-tight text-white group-hover:text-brand-50 transition-colors">FileDrop</span>
             </Link>
           </div>
