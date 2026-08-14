@@ -45,7 +45,7 @@ export const env = {
   maxExpirationHours: parseInt(process.env.MAX_EXPIRATION_HOURS ?? "168", 10),
 
   reservationTtlMinutes: parseInt(process.env.RESERVATION_TTL_MINUTES ?? "60", 10),
-  multipartPartSizeBytes: bytesFromSizeString(process.env.MULTIPART_PART_SIZE ?? "16MB"),
+  multipartPartSizeBytes: bytesFromSizeString(process.env.MULTIPART_PART_SIZE ?? "64MB"),
   presignedUrlTtlSeconds: parseInt(process.env.PRESIGNED_URL_TTL_SECONDS ?? "900", 10),
 
   rateLimitUploadPerHour: parseInt(process.env.RATE_LIMIT_UPLOAD_PER_HOUR ?? "20", 10),

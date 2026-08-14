@@ -59,6 +59,12 @@ export interface UploadOptions {
   downloadLimit: number | null;
 }
 
+export interface UploadTelemetry {
+  concurrency: number;
+  averagePartUploadTimeMs: number;
+  retryCount: number;
+}
+
 export interface UploadProgressState {
   status: UploadStatus;
   bytesUploaded: number;
@@ -67,4 +73,5 @@ export interface UploadProgressState {
   etaSeconds: number | null;
   errorMessage: string | null;
   result: CompleteUploadResponse | null;
+  telemetry: UploadTelemetry;
 }

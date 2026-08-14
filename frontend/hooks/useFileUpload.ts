@@ -5,8 +5,6 @@ import { createUploadSession, completeUpload, abortUpload, refreshPartUrls } fro
 import { uploadPartWithProgress, ApiRequestError } from "@/lib/api/client";
 import { CompletedPart, UploadOptions, UploadProgressState } from "@/types/upload";
 
-const CONCURRENCY = 4;
-
 const initialState: UploadProgressState = {
   status: "idle",
   bytesUploaded: 0,
@@ -15,6 +13,11 @@ const initialState: UploadProgressState = {
   etaSeconds: null,
   errorMessage: null,
   result: null,
+  telemetry: {
+    concurrency: 4,
+    averagePartUploadTimeMs: 0,
+    retryCount: 0,
+  },
 };
 
 export function useFileUpload() {
@@ -77,7 +80,32 @@ export function useFileUpload() {
     const file = fileRef.current;
     const partSize = partSizeRef.current;
 
-    async function uploadOnePart(part: { partNumber: number; presignedUrl: string }) {
+    const hwConcurrency = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
+    const maxAllowedConcurrency = Math.min(8, Math.max(4, hwConcurrency));
+    const MIN_CONCURRENCY = 2;
+    
+    let targetConcurrency = 4;
+    let consecutiveSuccesses = 0;
+    let consecutiveErrors = 0;
+
+    let totalUploadTimeMs = 0;
+    let partsCompletedByWorkers = 0;
+    let totalRetries = 0;
+
+    const updateTelemetry = () => {
+      setState((prev) => ({
+        ...prev,
+        telemetry: {
+          concurrency: targetConcurrency,
+          averagePartUploadTimeMs: partsCompletedByWorkers > 0 ? totalUploadTimeMs / partsCompletedByWorkers : 0,
+          retryCount: totalRetries,
+        },
+      }));
+    };
+    
+    const activeWorkers = new Set<Promise<void>>();
+
+    async function uploadOnePart(part: { partNumber: number; presignedUrl: string }, onRetry: () => void) {
       if (completedPartsRef.current.has(part.partNumber)) {
         partProgressRef.current.set(part.partNumber, Math.min(partSize, file.size - (part.partNumber - 1) * partSize));
         return;
@@ -155,6 +183,7 @@ export function useFileUpload() {
           }
 
           attempt++;
+          onRetry();
           const delay = Math.min(16000, 1000 * (2 ** (attempt - 1))); // 1s, 2s, 4s, 8s, 16s
 
           if (!navigator.onLine) {
@@ -168,32 +197,94 @@ export function useFileUpload() {
     }
 
     let cursor = 0;
-    async function worker() {
-      while (cursor < queueRef.current.length) {
-        if (cancelSignal?.aborted || pauseSignal.aborted || isPausedRef.current) break;
+    let hasError = false;
 
-        const part = queueRef.current[cursor++];
+    function ensureWorkers(resolve: () => void, reject: (err: any) => void) {
+      if (hasError || cancelSignal?.aborted || pauseSignal.aborted || isPausedRef.current) {
+        if (activeWorkers.size === 0) resolve();
+        return;
+      }
+      
+      while (activeWorkers.size < targetConcurrency && cursor < queueRef.current.length) {
+        const workerPromise = worker(resolve, reject);
+        activeWorkers.add(workerPromise);
+        workerPromise.finally(() => {
+          activeWorkers.delete(workerPromise);
+          if (activeWorkers.size === 0 && cursor >= queueRef.current.length) {
+            resolve();
+          } else {
+            ensureWorkers(resolve, reject);
+          }
+        });
+      }
+      
+      if (activeWorkers.size === 0 && cursor >= queueRef.current.length) {
+        resolve();
+      }
+    }
+
+    async function worker(resolve: () => void, reject: (err: any) => void) {
+      while (cursor < queueRef.current.length) {
+        if (hasError || cancelSignal?.aborted || pauseSignal.aborted || isPausedRef.current) break;
+        if (activeWorkers.size > targetConcurrency) break; // Scale down
+
+        const partIndex = cursor++;
+        const part = queueRef.current[partIndex];
+        
         if (completedPartsRef.current.has(part.partNumber)) {
           partProgressRef.current.set(part.partNumber, Math.min(partSize, file.size - (part.partNumber - 1) * partSize));
           continue;
         }
 
+        let retried = false;
+        const handleRetry = () => {
+          retried = true;
+          totalRetries++;
+          consecutiveSuccesses = 0;
+          consecutiveErrors++;
+          if (consecutiveErrors >= 2 && targetConcurrency > MIN_CONCURRENCY) {
+            targetConcurrency--;
+            consecutiveErrors = 0;
+          }
+          updateTelemetry();
+        };
+
         try {
-          await uploadOnePart(part);
+          const start = Date.now();
+          await uploadOnePart(part, handleRetry);
+          const duration = Date.now() - start;
+          
+          totalUploadTimeMs += duration;
+          partsCompletedByWorkers++;
+          
+          if (!retried) {
+            consecutiveErrors = 0;
+            consecutiveSuccesses++;
+            if (consecutiveSuccesses >= 3 && targetConcurrency < maxAllowedConcurrency) {
+              targetConcurrency++;
+              consecutiveSuccesses = 0;
+            }
+          }
+          updateTelemetry();
+
         } catch (err: any) {
           if (err.message === "PAUSED" || err.message === "CANCELLED") {
             // Put it back in the queue for resume
-            cursor--;
+            cursor = Math.min(cursor, partIndex);
             break;
           }
-          throw err;
+          hasError = true;
+          reject(err);
+          break;
         }
       }
     }
 
     try {
-      const activeWorkers = Array.from({ length: Math.min(CONCURRENCY, queueRef.current.length) }, worker);
-      await Promise.all(activeWorkers);
+      updateTelemetry();
+      await new Promise<void>((resolve, reject) => {
+        ensureWorkers(resolve, reject);
+      });
 
       if (cancelSignal?.aborted) return;
       if (pauseSignal.aborted || isPausedRef.current) return;
