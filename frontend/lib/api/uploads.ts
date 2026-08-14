@@ -40,3 +40,10 @@ export async function abortUpload(sessionId: string): Promise<void> {
     body: JSON.stringify({ sessionId }),
   });
 }
+
+export async function sendHeartbeat(sessionId: string): Promise<void> {
+  await apiFetch("/api/uploads/heartbeat", {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  });
+}

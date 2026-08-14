@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { env } from "@/config/env";
 import { ok, ApiError } from "@/utils/apiResponse";
 import { sanitizeFilename, buildStorageKey, generateFileId, generateSessionId } from "@/utils/ids";
-import { createUploadSessionSchema, completeUploadSchema, abortUploadSchema } from "@/validators/upload.validator";
+import { createUploadSessionSchema, completeUploadSchema, abortUploadSchema, heartbeatUploadSchema } from "@/validators/upload.validator";
 import { reserveStorage, commitReservation, releaseReservation } from "@/services/storageReservation.service";
 import { storage } from "@/services/storage.service";
 import crypto from "crypto";
@@ -162,15 +162,57 @@ export async function abortUpload(req: Request, res: Response, next: NextFunctio
     if (!session) throw new ApiError(404, "SESSION_NOT_FOUND", "Upload session not found.");
 
     if (session.status === "uploading" || session.status === "initializing") {
-      await storage.abortMultipartUpload(session.storageKey, session.storageUploadId).catch((err) => {
-        logger.warn({ err, sessionId: session.sessionId }, "Storage abort failed (continuing cleanup)");
-      });
-      await releaseReservation(session.reservationId as never);
-      session.status = "aborted";
-      await session.save();
+      const lockedSession = await UploadSessionModel.findOneAndUpdate(
+        { _id: session._id, status: session.status, cleanupClaimedAt: session.cleanupClaimedAt },
+        { $set: { cleanupClaimedAt: new Date() } },
+        { new: true }
+      );
+      
+      if (!lockedSession) {
+        const current = await UploadSessionModel.findOne({ sessionId: input.sessionId });
+        return ok(res, { sessionId: input.sessionId, status: current?.status ?? session.status });
+      }
+
+      try {
+        await storage.abortMultipartUpload(lockedSession.storageKey, lockedSession.storageUploadId);
+      } catch (err) {
+        logger.warn({ err, sessionId: lockedSession.sessionId }, "Storage abort failed in cancellation");
+        throw new ApiError(502, "STORAGE_ABORT_FAILED", "Failed to cancel upload in storage. It will be cleaned up automatically.");
+      }
+
+      await releaseReservation(lockedSession.reservationId as never);
+      lockedSession.status = "aborted";
+      await lockedSession.save();
+      return ok(res, { sessionId: lockedSession.sessionId, status: lockedSession.status });
     }
 
     return ok(res, { sessionId: session.sessionId, status: session.status });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** POST /api/uploads/heartbeat — keeps the upload alive so it's not swept by cleanup */
+export async function heartbeatUpload(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = heartbeatUploadSchema.parse(req.body);
+    const session = await UploadSessionModel.findOneAndUpdate(
+      { 
+        sessionId: input.sessionId, 
+        status: { $in: ["initializing", "uploading", "completing"] } 
+      },
+      { $set: { lastUploadActivityAt: new Date() } },
+      { new: true }
+    );
+    
+    if (!session) {
+      // Return 404 or just 200? The user may have been disconnected and session was cleaned.
+      // If we throw, the frontend might stop. We should probably return 200 with an indicator, or throw 404.
+      // A 404 is appropriate if it's genuinely gone/aborted.
+      throw new ApiError(404, "SESSION_NOT_FOUND", "Upload session is no longer active or not found.");
+    }
+
+    return ok(res, { success: true });
   } catch (err) {
     next(err);
   }

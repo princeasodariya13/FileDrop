@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState, useEffect } from "react";
-import { createUploadSession, completeUpload, abortUpload, refreshPartUrls } from "@/lib/api/uploads";
+import { createUploadSession, completeUpload, abortUpload, refreshPartUrls, sendHeartbeat } from "@/lib/api/uploads";
 import { uploadPartWithProgress, ApiRequestError } from "@/lib/api/client";
 import { CompletedPart, UploadOptions, UploadProgressState } from "@/types/upload";
 
@@ -375,6 +375,66 @@ export function useFileUpload() {
       window.removeEventListener("online", handleOnline);
     };
   }, [startWorkers]);
+
+  // Dedicated upload heartbeat
+  useEffect(() => {
+    const isActive = ["validating", "reserving", "uploading", "paused", "completing"].includes(state.status);
+    let intervalId: ReturnType<typeof setInterval>;
+
+    if (isActive && sessionIdRef.current) {
+      intervalId = setInterval(() => {
+        if (sessionIdRef.current) {
+          sendHeartbeat(sessionIdRef.current).catch(() => {
+            // Best effort, ignore failures (e.g. during offline).
+            // The backend abandoned-timeout will act as the safety net.
+          });
+        }
+      }, 30000); // 30 seconds
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [state.status]);
+
+  // Protect active uploads from accidental page refresh/close
+  useEffect(() => {
+    const isActive = ["validating", "reserving", "uploading", "paused", "completing"].includes(state.status);
+    
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ""; // Required for modern browsers to show the "Leave site?" prompt
+    };
+
+    const handleUnload = () => {
+      if (sessionIdRef.current && isActive) {
+        const payload = JSON.stringify({ sessionId: sessionIdRef.current });
+        const url = `${process.env.NEXT_PUBLIC_API_URL || ""}/api/uploads/abort`;
+        
+        // Best-effort async cancellation that survives tab closure
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch(url, {
+            method: 'POST',
+            body: payload,
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true
+          }).catch(() => {});
+        }
+      }
+    };
+
+    if (isActive) {
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      window.addEventListener("unload", handleUnload);
+    }
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("unload", handleUnload);
+    };
+  }, [state.status]);
 
   const cancel = useCallback(() => {
     userCancelControllerRef.current?.abort();

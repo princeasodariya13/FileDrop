@@ -23,6 +23,8 @@ export interface IUploadSession extends Document {
   expirationHours?: number; // legacy backward compatibility
   expirationSeconds?: number;
   clientIp: string;
+  lastUploadActivityAt: Date;
+  cleanupClaimedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -48,11 +50,13 @@ const UploadSessionSchema = new Schema<IUploadSession>(
     expirationHours: { type: Number, required: false },
     expirationSeconds: { type: Number, required: false },
     clientIp: { type: String, required: true },
+    lastUploadActivityAt: { type: Date, required: true, default: Date.now },
+    cleanupClaimedAt: { type: Date, required: false },
   },
   { timestamps: true }
 );
 
-// Abandoned sessions are swept by the cleanup job based on updatedAt + status.
-UploadSessionSchema.index({ status: 1, updatedAt: 1 });
+// Abandoned sessions are swept by the cleanup job based on lastUploadActivityAt + status.
+UploadSessionSchema.index({ status: 1, lastUploadActivityAt: 1 });
 
 export const UploadSessionModel = model<IUploadSession>("UploadSession", UploadSessionSchema);

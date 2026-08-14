@@ -31,3 +31,7 @@ export const completeUploadSchema = z.object({
 export const abortUploadSchema = z.object({
   sessionId: z.string().min(1).max(100),
 });
+
+export const heartbeatUploadSchema = z.object({
+  sessionId: z.string().min(1).max(100),
+});

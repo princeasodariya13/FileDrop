@@ -45,24 +45,53 @@ export async function expireOverdueFiles(): Promise<number> {
   return count;
 }
 
-/** Abort + release reservations for upload sessions abandoned by the client. */
 export async function sweepAbandonedSessions(): Promise<number> {
-  const staleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h of inactivity
+  const { env } = await import("@/config/env");
+  const staleThreshold = new Date(Date.now() - env.abandonedUploadTimeoutMinutes * 60 * 1000);
+  const lockThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minute claim lock
+  const legacyGraceThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hour grace for pre-deployment sessions
+
   const abandoned = await UploadSessionModel.find({
-    status: { $in: ["initializing", "uploading", "completing"] },
-    updatedAt: { $lt: staleThreshold },
+    status: { $in: ["initializing", "uploading"] },
+    $or: [
+      { lastUploadActivityAt: { $lt: staleThreshold } },
+      { lastUploadActivityAt: { $exists: false }, updatedAt: { $lt: legacyGraceThreshold } } // Legacy grace period
+    ],
+    cleanupClaimedAt: { $not: { $gt: lockThreshold } }
   }).limit(200);
 
   let count = 0;
   for (const session of abandoned) {
-    try {
-      await storage.abortMultipartUpload(session.storageKey, session.storageUploadId);
-    } catch (err) {
-      logger.warn({ err, sessionId: session.sessionId }, "Cleanup: storage abort failed (object may not exist)");
+    // Atomic claim guarantees only one worker can process this session, 
+    // and verifies it hasn't received a heartbeat since the find() query.
+    const lockedSession = await UploadSessionModel.findOneAndUpdate(
+      { 
+        _id: session._id, 
+        status: { $in: ["initializing", "uploading"] },
+        $or: [
+          { lastUploadActivityAt: { $lt: staleThreshold } },
+          { lastUploadActivityAt: { $exists: false }, updatedAt: { $lt: legacyGraceThreshold } }
+        ],
+        cleanupClaimedAt: session.cleanupClaimedAt
+      },
+      { $set: { cleanupClaimedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!lockedSession) {
+      continue;
     }
-    await releaseReservation(session.reservationId as never);
-    session.status = "aborted";
-    await session.save();
+
+    try {
+      await storage.abortMultipartUpload(lockedSession.storageKey, lockedSession.storageUploadId);
+    } catch (err) {
+      logger.warn({ err, sessionId: lockedSession.sessionId }, "Cleanup: storage abort failed (will retry next cycle)");
+      continue;
+    }
+
+    await releaseReservation(lockedSession.reservationId as never);
+    lockedSession.status = "aborted";
+    await lockedSession.save();
     count++;
   }
   return count;
