@@ -119,12 +119,11 @@ export async function deleteFile(req: Request, res: Response, next: NextFunction
     );
     if (!file) throw new ApiError(404, "FILE_NOT_FOUND", "This file is no longer available.");
 
-    await storage.deleteObject(file.storageKey).catch((err) => {
-      logger.error({ err, fileId: file.fileId }, "Failed to delete storage object");
-    });
+    // We intentionally DO NOT delete the storage object or release storage quota here.
+    // This safely protects any receivers who are currently downloading the file.
+    // The background cleanup job will physically delete the object and release quota
+    // once all active DownloadSession leases reach zero.
 
-    const { releaseActiveStorage } = await import("@/services/storageReservation.service");
-    await releaseActiveStorage(file.sizeBytes);
 
     return ok(res, { fileId: file.fileId, status: "deleted" });
   } catch (err) {

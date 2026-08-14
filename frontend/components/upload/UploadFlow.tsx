@@ -10,6 +10,9 @@ import { useFileUpload } from "@/hooks/useFileUpload";
 import { useToast } from "@/components/ui/Toast";
 import { UploadOptions } from "@/types/upload";
 import { formatBytes } from "@/utils/format";
+import { useMyUploads } from "@/hooks/useMyUploads";
+import { MyUploadsList } from "@/components/upload/MyUploadsList";
+import { useEffect } from "react";
 
 const DEFAULT_OPTIONS: UploadOptions = { expirationSeconds: 3600, downloadLimit: null };
 
@@ -18,8 +21,15 @@ export function UploadFlow() {
   const [options, setOptions] = useState<UploadOptions>(DEFAULT_OPTIONS);
   const { state, upload, cancel, reset } = useFileUpload();
   const { push } = useToast();
+  const { addUpload } = useMyUploads();
 
-  const isBusy = ["validating", "reserving", "initializing", "uploading", "completing"].includes(state.status);
+  useEffect(() => {
+    if (state.status === "success" && state.result) {
+      addUpload(state.result);
+    }
+  }, [state.status, state.result, addUpload]);
+
+  const isBusy = ["validating", "reserving", "initializing", "uploading", "paused", "completing"].includes(state.status);
 
   async function handleStart() {
     if (!selectedFile) return;
@@ -37,7 +47,12 @@ export function UploadFlow() {
   }
 
   if (state.status === "success" && state.result) {
-    return <ShareResult result={state.result} onUploadAnother={handleReset} />;
+    return (
+      <div className="space-y-4">
+        <ShareResult result={state.result} onUploadAnother={handleReset} />
+        <MyUploadsList />
+      </div>
+    );
   }
 
   if (isBusy && selectedFile) {
@@ -80,6 +95,8 @@ export function UploadFlow() {
           </Button>
         </div>
       )}
+
+      <MyUploadsList />
     </div>
   );
 }

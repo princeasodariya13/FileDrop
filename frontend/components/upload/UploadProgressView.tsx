@@ -10,6 +10,7 @@ const STATUS_LABEL: Record<string, string> = {
   reserving: "Reserving storage…",
   initializing: "Preparing upload…",
   uploading: "Uploading…",
+  paused: "Paused (Waiting for network)…",
   completing: "Finalizing…",
 };
 

@@ -8,24 +8,24 @@ import { logger } from "@/utils/logger";
 /** Expire files whose expiresAt has passed: delete storage object, release storage, mark expired. */
 export async function expireOverdueFiles(): Promise<number> {
   const overdue = await FileModel.find({
-    status: { $in: ["active", "exhausted"] },
-    expiresAt: { $lt: new Date() },
+    $or: [
+      { status: { $in: ["active", "exhausted"] }, expiresAt: { $lt: new Date() } },
+      { status: "deleted" }
+    ]
   }).limit(200);
   let count = 0;
 
   const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
 
   for (const file of overdue) {
-    // 1. Fresh check for active download sessions
-    if (file.status === "active") {
-      const activeSessions = await DownloadSessionModel.countDocuments({
-        fileId: file._id,
-        status: "active"
-      });
-      if (activeSessions > 0) {
-        // Protect the file while download is active.
-        continue;
-      }
+    // 1. Fresh check for active download sessions (must protect active downloads even if file is deleted/exhausted)
+    const activeSessions = await DownloadSessionModel.countDocuments({
+      fileId: file._id,
+      status: "active"
+    });
+    if (activeSessions > 0) {
+      // Protect the file while download is active.
+      continue;
     }
 
     try {
@@ -39,7 +39,7 @@ export async function expireOverdueFiles(): Promise<number> {
     file.status = "expired";
     await file.save();
     count++;
-    logger.info({ fileId: file.fileId }, "File expired and cleaned up");
+    logger.info({ fileId: file.fileId }, "File expired/deleted and cleaned up");
   }
 
   return count;
