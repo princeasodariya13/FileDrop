@@ -19,5 +19,26 @@ export async function sendHeartbeat(sessionId: string) {
 }
 
 export async function getDownloadUrl(fileId: string): Promise<{ downloadUrl: string; fileName: string; sessionId: string }> {
-  return apiFetch(`/api/files/${fileId}/download`, { method: "POST" });
+  let receiverId = undefined;
+  if (typeof window !== "undefined") {
+    try {
+      receiverId = localStorage.getItem("filedrop_receiver_id") || undefined;
+    } catch {}
+  }
+
+  const response = await apiFetch<{ downloadUrl: string; fileName: string; sessionId: string; receiverId?: string }>(
+    `/api/files/${fileId}/download`,
+    {
+      method: "POST",
+      body: JSON.stringify({ receiverId })
+    }
+  );
+
+  if (typeof window !== "undefined" && response.receiverId) {
+    try {
+      localStorage.setItem("filedrop_receiver_id", response.receiverId);
+    } catch {}
+  }
+
+  return response;
 }

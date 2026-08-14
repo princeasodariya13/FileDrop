@@ -13,8 +13,8 @@ const EXPIRATION_CHOICES = [
 
 const DOWNLOAD_LIMIT_CHOICES = [
   { label: "Unlimited", value: null },
-  { label: "1 download", value: 1 },
-  { label: "5 downloads", value: 5 },
+  { label: "1 system", value: 1 },
+  { label: "5 systems", value: 5 },
 ];
 
 interface Props {
@@ -49,22 +49,52 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
 
       <fieldset disabled={disabled}>
         <legend className="text-xs font-semibold text-ink-300 mb-2 uppercase tracking-wider">Download limit</legend>
-        <div className="flex gap-2 flex-wrap">
-          {DOWNLOAD_LIMIT_CHOICES.map((choice) => (
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-2 flex-wrap">
+            {DOWNLOAD_LIMIT_CHOICES.map((choice) => (
+              <button
+                key={choice.label}
+                type="button"
+                aria-pressed={value.downloadLimit === choice.value}
+                onClick={() => onChange({ ...value, downloadLimit: choice.value })}
+                className={`focus-ring rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
+                  value.downloadLimit === choice.value
+                    ? "border-accent-400 bg-brand-500/20 text-accent-100 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-[1.02]"
+                    : "border-white/10 bg-white/5 text-ink-300 hover:border-brand-400/50 hover:bg-white/10 hover:text-ink-100"
+                }`}
+              >
+                {choice.label}
+              </button>
+            ))}
             <button
-              key={choice.label}
               type="button"
-              aria-pressed={value.downloadLimit === choice.value}
-              onClick={() => onChange({ ...value, downloadLimit: choice.value })}
+              aria-pressed={value.downloadLimit !== null && value.downloadLimit !== 1 && value.downloadLimit !== 5}
+              onClick={() => onChange({ ...value, downloadLimit: 10 })}
               className={`focus-ring rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
-                value.downloadLimit === choice.value
+                value.downloadLimit !== null && value.downloadLimit !== 1 && value.downloadLimit !== 5
                   ? "border-accent-400 bg-brand-500/20 text-accent-100 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-[1.02]"
                   : "border-white/10 bg-white/5 text-ink-300 hover:border-brand-400/50 hover:bg-white/10 hover:text-ink-100"
               }`}
             >
-              {choice.label}
+              Custom
             </button>
-          ))}
+          </div>
+          {value.downloadLimit !== null && value.downloadLimit !== 1 && value.downloadLimit !== 5 && (
+            <div className="flex items-center gap-2 animate-fade-in-scale">
+              <input
+                type="number"
+                min="1"
+                max="1000"
+                value={value.downloadLimit || ""}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  onChange({ ...value, downloadLimit: isNaN(val) ? 10 : Math.max(1, Math.min(1000, val)) });
+                }}
+                className="focus-ring w-24 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-ink-100 outline-none transition-colors focus:border-brand-400 focus:bg-white/10"
+              />
+              <span className="text-sm text-ink-400">systems</span>
+            </div>
+          )}
         </div>
       </fieldset>
     </div>
