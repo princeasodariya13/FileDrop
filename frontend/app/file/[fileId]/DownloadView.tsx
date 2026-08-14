@@ -9,8 +9,8 @@ import { ApiRequestError } from "@/lib/api/client";
 import { FileInfoResponse } from "@/types/upload";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 
-function getExpiryText(expiresAt: string) {
-  const remainingMs = new Date(expiresAt).getTime() - Date.now();
+function getExpiryText(expiresAt: string, currentTime: number) {
+  const remainingMs = new Date(expiresAt).getTime() - currentTime;
   if (remainingMs <= 0) return "expired";
   
   const totalMinutes = Math.max(1, Math.floor(remainingMs / 60000));
@@ -31,15 +31,16 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const { push } = useToast();
   
-  const [expiryText, setExpiryText] = useState(() => getExpiryText(file.expiresAt));
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   useEffect(() => {
-    setExpiryText(getExpiryText(file.expiresAt));
     const interval = setInterval(() => {
-      setExpiryText(getExpiryText(file.expiresAt));
-    }, 60000);
+      setCurrentTime(Date.now());
+    }, 1000);
     return () => clearInterval(interval);
-  }, [file.expiresAt]);
+  }, []);
+
+  const expiryText = getExpiryText(file.expiresAt, currentTime);
 
   // Cleanup heartbeat on unmount
   useEffect(() => {
