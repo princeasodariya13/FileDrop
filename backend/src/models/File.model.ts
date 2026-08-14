@@ -12,7 +12,8 @@ export interface IFile extends Document {
   possessionToken: string;
   status: FileStatus;
   downloadLimit: number | null; // null = unlimited
-  downloadCount: number;
+  downloadCount: number; // legacy field for backward compatibility
+  receiverIds: string[]; // unique receiver identities
   expiresAt: Date;
   inactivityTimerStartsAt: Date;
   reservationId: Types.ObjectId | null;
@@ -37,6 +38,7 @@ const FileSchema = new Schema<IFile>(
     },
     downloadLimit: { type: Number, default: null, min: 1 },
     downloadCount: { type: Number, default: 0, min: 0 },
+    receiverIds: { type: [String], default: [] },
     expiresAt: { type: Date, required: true },
     inactivityTimerStartsAt: { type: Date, required: true },
     reservationId: { type: Schema.Types.ObjectId, ref: "StorageReservation", default: null },

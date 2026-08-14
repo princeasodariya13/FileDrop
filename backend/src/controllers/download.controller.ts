@@ -16,9 +16,9 @@ export async function getFileInfo(req: Request, res: Response, next: NextFunctio
     if (file.expiresAt < new Date()) {
       throw new ApiError(410, "FILE_EXPIRED", "This file has expired.");
     }
-    if (file.downloadLimit !== null && file.downloadCount >= file.downloadLimit) {
-      throw new ApiError(410, "DOWNLOAD_LIMIT_REACHED", "This download link is no longer available.");
-    }
+    // We no longer throw 410 for downloadLimit here because an existing receiver
+    // (who already has a slot) must still be able to view the file page and download.
+    // The limit is strictly enforced in generateDownload via the receiverId.
 
     return ok(res, {
       fileId: file.fileId,
@@ -27,7 +27,7 @@ export async function getFileInfo(req: Request, res: Response, next: NextFunctio
       mimeType: file.mimeType,
       expiresAt: file.expiresAt,
       downloadLimit: file.downloadLimit,
-      downloadCount: file.downloadCount,
+      downloadCount: file.downloadCount + file.receiverIds.length,
     });
   } catch (err) {
     next(err);
@@ -46,38 +46,43 @@ export async function generateDownload(req: Request, res: Response, next: NextFu
   try {
     const now = new Date();
 
-    // Atomic conditional increment: only succeeds if still active, not expired,
-    // and under the download limit (or unlimited).
-    const file = await FileModel.findOneAndUpdate(
-      {
-        fileId: req.params.fileId,
-        status: "active",
-        expiresAt: { $gt: now },
-        $or: [{ downloadLimit: null }, { $expr: { $lt: ["$downloadCount", "$downloadLimit"] } }],
-      },
-      { $inc: { downloadCount: 1 } },
-      { new: true }
-    );
+    const existing = await FileModel.findOne({ fileId: req.params.fileId });
+    if (!existing || existing.status !== "active") {
+      throw new ApiError(404, "FILE_NOT_FOUND", "This file is no longer available.");
+    }
+    if (existing.expiresAt < now) {
+      throw new ApiError(410, "FILE_EXPIRED", "This file has expired.");
+    }
 
-    if (!file) {
-      // Distinguish "doesn't exist" from "exists but blocked" for a clearer error,
-      // without leaking whether a limit-reached file still technically exists.
-      const existing = await FileModel.findOne({ fileId: req.params.fileId });
-      if (!existing || existing.status !== "active") {
-        throw new ApiError(404, "FILE_NOT_FOUND", "This file is no longer available.");
+    let receiverId = req.body.receiverId;
+    if (!receiverId || typeof receiverId !== "string" || receiverId.length > 100) {
+      receiverId = crypto.randomBytes(16).toString("hex");
+    }
+
+    let file = existing;
+
+    if (existing.downloadLimit !== null) {
+      // It's a limited file. Atomically claim a slot or verify existing slot.
+      file = await FileModel.findOneAndUpdate(
+        {
+          _id: existing._id,
+          status: "active",
+          expiresAt: { $gt: now },
+          $or: [
+            { receiverIds: receiverId }, // Existing receiver
+            { $expr: { $lt: [{ $add: ["$downloadCount", { $size: "$receiverIds" }] }, "$downloadLimit"] } } // New receiver, slot available
+          ],
+        },
+        { $addToSet: { receiverIds: receiverId } },
+        { new: true }
+      ) as typeof existing;
+
+      if (!file) {
+        throw new ApiError(410, "DOWNLOAD_LIMIT_REACHED", "This download limit has been reached.");
       }
-      if (existing.expiresAt < now) {
-        throw new ApiError(410, "FILE_EXPIRED", "This file has expired.");
-      }
-      throw new ApiError(410, "DOWNLOAD_LIMIT_REACHED", "This download link is no longer available.");
     }
 
     const presignedUrl = await storage.presignDownloadUrl(file.storageKey, file.sanitizedName);
-
-    if (file.downloadLimit !== null && file.downloadCount >= file.downloadLimit) {
-      file.status = "exhausted";
-      await file.save();
-    }
 
     const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
     const { generateSessionId } = await import("@/utils/ids");
@@ -96,9 +101,9 @@ export async function generateDownload(req: Request, res: Response, next: NextFu
       userAgent: req.get("user-agent") ?? "",
     });
 
-    logger.info({ fileId: file.fileId, downloadSessionId: sessionId }, "Download URL issued and session started");
+    logger.info({ fileId: file.fileId, downloadSessionId: sessionId, receiverId }, "Download URL issued and session started");
 
-    return ok(res, { downloadUrl: presignedUrl, fileName: file.originalName, sessionId });
+    return ok(res, { downloadUrl: presignedUrl, fileName: file.originalName, sessionId, receiverId });
   } catch (err) {
     next(err);
   }
