@@ -24,8 +24,13 @@ export default function RootLayout({
         <header className="sticky top-0 z-50 bg-bg-base/60 backdrop-blur-xl border-b border-white/5">
           <div className="mx-auto max-w-5xl px-4 sm:px-6 py-4 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3 focus-ring rounded-lg group">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-btn-primary text-white text-base font-bold shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow">
-                F
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-btn-primary text-white shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="12" y1="18" x2="12" y2="12" />
+                  <polyline points="9 15 12 18 15 15" />
+                </svg>
               </span>
               <span className="font-heading font-semibold text-xl tracking-tight text-white group-hover:text-brand-50 transition-colors">FileDrop</span>
             </Link>
