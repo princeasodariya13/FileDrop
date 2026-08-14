@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Dropzone } from "@/components/upload/Dropzone";
 import { UploadOptionsForm } from "@/components/upload/UploadOptionsForm";
 import { UploadProgressView } from "@/components/upload/UploadProgressView";
@@ -12,20 +12,44 @@ import { UploadOptions } from "@/types/upload";
 import { formatBytes } from "@/utils/format";
 import { useMyUploads } from "@/hooks/useMyUploads";
 import { MyUploadsList } from "@/components/upload/MyUploadsList";
-import { useEffect } from "react";
 
 const DEFAULT_OPTIONS: UploadOptions = { expirationSeconds: 3600, downloadLimit: null };
+
+interface ActiveUploadMetadata {
+  sessionId: string;
+  fileName: string;
+  sizeBytes: number;
+  mimeType: string;
+  startedAt: number;
+}
 
 export function UploadFlow() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [options, setOptions] = useState<UploadOptions>(DEFAULT_OPTIONS);
-  const { state, upload, cancel, reset } = useFileUpload();
+  const { state, upload, resume, cancel, reset } = useFileUpload();
   const { push } = useToast();
   const { addUpload } = useMyUploads();
+
+  const [unfinishedUpload, setUnfinishedUpload] = useState<ActiveUploadMetadata | null>(null);
+  const resumeInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("filedrop_active_upload");
+      if (stored) {
+        setUnfinishedUpload(JSON.parse(stored));
+      } else {
+        setUnfinishedUpload(null);
+      }
+    } catch (e) {}
+  }, [state.status]);
 
   useEffect(() => {
     if (state.status === "success" && state.result) {
       addUpload(state.result);
+    }
+    if (["success", "cancelled"].includes(state.status)) {
+      setUnfinishedUpload(null);
     }
   }, [state.status, state.result, addUpload]);
 
@@ -46,6 +70,40 @@ export function UploadFlow() {
     reset();
   }
 
+  async function handleResumeFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !unfinishedUpload) return;
+
+    if (file.name !== unfinishedUpload.fileName || file.size !== unfinishedUpload.sizeBytes) {
+      push("The selected file does not match the unfinished upload.", "error");
+      if (resumeInputRef.current) resumeInputRef.current.value = "";
+      return;
+    }
+
+    try {
+      await resume(file, unfinishedUpload.sessionId);
+    } catch (err: any) {
+      push(err.message || "Failed to resume upload.", "error");
+    }
+  }
+
+  async function handleDiscardUnfinished() {
+    if (unfinishedUpload) {
+      try {
+        await fetch("/api/uploads/abort", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: unfinishedUpload.sessionId })
+        });
+      } catch (e) {}
+      try {
+        localStorage.removeItem("filedrop_active_upload");
+        localStorage.removeItem("filedrop_resume_lock");
+      } catch(e) {}
+      setUnfinishedUpload(null);
+    }
+  }
+
   if (state.status === "success" && state.result) {
     return (
       <div className="space-y-4">
@@ -55,15 +113,37 @@ export function UploadFlow() {
     );
   }
 
-  if (isBusy && selectedFile) {
-    return <UploadProgressView fileName={selectedFile.name} progress={state} onCancel={cancel} />;
+  if (isBusy && (selectedFile || unfinishedUpload)) {
+    return <UploadProgressView fileName={selectedFile?.name || unfinishedUpload?.fileName || "File"} progress={state} onCancel={cancel} />;
   }
 
   return (
     <div className="space-y-4">
-      <Dropzone onFileSelected={setSelectedFile} disabled={isBusy} />
+      {unfinishedUpload ? (
+        <div className="rounded-card p-6 space-y-4 border border-brand-500/20 bg-brand-500/5 animate-fade-in-scale">
+          <h3 className="text-lg font-semibold text-brand-400">Unfinished upload detected</h3>
+          <p className="text-sm text-ink-300">
+            {unfinishedUpload.fileName} — {formatBytes(unfinishedUpload.sizeBytes)}
+          </p>
+          <p className="text-sm text-ink-400">
+            This upload can be resumed from where it stopped.
+          </p>
+          <div className="flex gap-4 pt-2">
+            <Button onClick={() => resumeInputRef.current?.click()}>Resume Upload</Button>
+            <Button variant="ghost" onClick={handleDiscardUnfinished}>Discard</Button>
+          </div>
+          <input
+            type="file"
+            ref={resumeInputRef}
+            className="hidden"
+            onChange={handleResumeFileSelected}
+          />
+        </div>
+      ) : (
+        <Dropzone onFileSelected={setSelectedFile} disabled={isBusy} />
+      )}
 
-      {selectedFile && (
+      {selectedFile && !unfinishedUpload && (
         <div className="rounded-card p-6 space-y-6 animate-fade-in-scale">
           <div className="flex items-center justify-between bg-surface border border-surface-hover rounded-xl p-4">
             <div className="flex items-center gap-4 min-w-0">
@@ -93,6 +173,14 @@ export function UploadFlow() {
           <Button className="w-full" onClick={handleStart}>
             Upload &amp; get link
           </Button>
+        </div>
+      )}
+
+      {state.status === "failed" && unfinishedUpload && (
+        <div className="rounded-card p-6">
+          <p role="alert" className="text-sm text-red-600">
+            {state.errorMessage}
+          </p>
         </div>
       )}
 

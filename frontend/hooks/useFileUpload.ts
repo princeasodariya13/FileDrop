@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState, useEffect } from "react";
-import { createUploadSession, completeUpload, abortUpload, refreshPartUrls, sendHeartbeat } from "@/lib/api/uploads";
+import { createUploadSession, completeUpload, abortUpload, refreshPartUrls, sendHeartbeat, resumeUploadData } from "@/lib/api/uploads";
 import { uploadPartWithProgress, ApiRequestError } from "@/lib/api/client";
 import { CompletedPart, UploadOptions, UploadProgressState } from "@/types/upload";
 
@@ -83,7 +83,7 @@ export function useFileUpload() {
     const hwConcurrency = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
     const maxAllowedConcurrency = Math.min(8, Math.max(4, hwConcurrency));
     const MIN_CONCURRENCY = 2;
-    
+
     let targetConcurrency = 4;
     let consecutiveSuccesses = 0;
     let consecutiveErrors = 0;
@@ -102,7 +102,7 @@ export function useFileUpload() {
         },
       }));
     };
-    
+
     const activeWorkers = new Set<Promise<void>>();
 
     async function uploadOnePart(part: { partNumber: number; presignedUrl: string }, onRetry: () => void) {
@@ -204,7 +204,7 @@ export function useFileUpload() {
         if (activeWorkers.size === 0) resolve();
         return;
       }
-      
+
       while (activeWorkers.size < targetConcurrency && cursor < queueRef.current.length) {
         const workerPromise = worker(resolve, reject);
         activeWorkers.add(workerPromise);
@@ -217,7 +217,7 @@ export function useFileUpload() {
           }
         });
       }
-      
+
       if (activeWorkers.size === 0 && cursor >= queueRef.current.length) {
         resolve();
       }
@@ -230,7 +230,7 @@ export function useFileUpload() {
 
         const partIndex = cursor++;
         const part = queueRef.current[partIndex];
-        
+
         if (completedPartsRef.current.has(part.partNumber)) {
           partProgressRef.current.set(part.partNumber, Math.min(partSize, file.size - (part.partNumber - 1) * partSize));
           continue;
@@ -253,10 +253,10 @@ export function useFileUpload() {
           const start = Date.now();
           await uploadOnePart(part, handleRetry);
           const duration = Date.now() - start;
-          
+
           totalUploadTimeMs += duration;
           partsCompletedByWorkers++;
-          
+
           if (!retried) {
             consecutiveErrors = 0;
             consecutiveSuccesses++;
@@ -338,6 +338,16 @@ export function useFileUpload() {
         queueRef.current = session.parts;
         partSizeRef.current = session.partSizeBytes;
 
+        try {
+          localStorage.setItem("filedrop_active_upload", JSON.stringify({
+            sessionId: session.sessionId,
+            fileName: file.name,
+            sizeBytes: file.size,
+            mimeType: file.type || "application/octet-stream",
+            startedAt: Date.now()
+          }));
+        } catch (e) {}
+
         setState((s) => ({ ...s, status: "uploading" }));
         startWorkers();
 
@@ -388,6 +398,18 @@ export function useFileUpload() {
             // Best effort, ignore failures (e.g. during offline).
             // The backend abandoned-timeout will act as the safety net.
           });
+
+          try {
+            const lockValue = localStorage.getItem("filedrop_resume_lock");
+            if (lockValue) {
+              const lock = JSON.parse(lockValue);
+              if (lock.sessionId === sessionIdRef.current) {
+                localStorage.setItem("filedrop_resume_lock", JSON.stringify({
+                  sessionId: sessionIdRef.current, timestamp: Date.now()
+                }));
+              }
+            }
+          } catch(e) {}
         }
       }, 30000); // 30 seconds
     }
@@ -397,44 +419,21 @@ export function useFileUpload() {
     };
   }, [state.status]);
 
-  // Protect active uploads from accidental page refresh/close
+  // Removed the old beforeunload/unload abort mechanism because it destroys the session
+  // on browser refresh, breaking the cross-refresh resumability feature.
+
+  const clearActiveUpload = useCallback(() => {
+    try {
+      localStorage.removeItem("filedrop_active_upload");
+      localStorage.removeItem("filedrop_resume_lock");
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
-    const isActive = ["validating", "reserving", "uploading", "paused", "completing"].includes(state.status);
-    
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = ""; // Required for modern browsers to show the "Leave site?" prompt
-    };
-
-    const handleUnload = () => {
-      if (sessionIdRef.current && isActive) {
-        const payload = JSON.stringify({ sessionId: sessionIdRef.current });
-        const url = `${process.env.NEXT_PUBLIC_API_URL || ""}/api/uploads/abort`;
-        
-        // Best-effort async cancellation that survives tab closure
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
-        } else {
-          fetch(url, {
-            method: 'POST',
-            body: payload,
-            headers: { 'Content-Type': 'application/json' },
-            keepalive: true
-          }).catch(() => {});
-        }
-      }
-    };
-
-    if (isActive) {
-      window.addEventListener("beforeunload", handleBeforeUnload);
-      window.addEventListener("unload", handleUnload);
+    if (["success", "cancelled"].includes(state.status)) {
+      clearActiveUpload();
     }
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      window.removeEventListener("unload", handleUnload);
-    };
-  }, [state.status]);
+  }, [state.status, clearActiveUpload]);
 
   const cancel = useCallback(() => {
     userCancelControllerRef.current?.abort();
@@ -451,5 +450,98 @@ export function useFileUpload() {
     setState(initialState);
   }, []);
 
-  return { state, upload, cancel, reset };
+  const resume = useCallback(
+    async (file: File, sessionId: string) => {
+      userCancelControllerRef.current = new AbortController();
+      partProgressRef.current = new Map();
+      completedPartsRef.current = new Map();
+      speedSamplesRef.current = [];
+      isPausedRef.current = false;
+      isUploadingRef.current = false;
+      fileRef.current = file;
+
+      try {
+        setState({ ...initialState, status: "validating", totalBytes: file.size });
+
+        try {
+          const lockValue = localStorage.getItem("filedrop_resume_lock");
+          if (lockValue) {
+            const lock = JSON.parse(lockValue);
+            if (lock.sessionId === sessionId && Date.now() - lock.timestamp < 60000) {
+              throw new Error("This upload is already being resumed in another tab.");
+            }
+          }
+          localStorage.setItem("filedrop_resume_lock", JSON.stringify({
+            sessionId, timestamp: Date.now()
+          }));
+        } catch (e: any) {
+          if (e.message === "This upload is already being resumed in another tab.") {
+            throw e;
+          }
+        }
+
+        const backendState = await resumeUploadData(sessionId);
+
+        if (backendState.fileName !== file.name || backendState.sizeBytes !== file.size) {
+          throw new Error("The selected file does not match the unfinished upload.");
+        }
+
+        sessionIdRef.current = backendState.sessionId;
+        partSizeRef.current = backendState.partSizeBytes;
+
+        let restoredBytes = 0;
+        for (const part of backendState.parts) {
+          completedPartsRef.current.set(part.partNumber, part.etag);
+          const pSize = part.partNumber === backendState.totalParts
+            ? file.size - (part.partNumber - 1) * backendState.partSizeBytes
+            : backendState.partSizeBytes;
+          restoredBytes += pSize;
+          partProgressRef.current.set(part.partNumber, pSize);
+        }
+
+        setState((s) => ({
+          ...s,
+          bytesUploaded: restoredBytes,
+          status: "reserving"
+        }));
+
+        const refreshedUrls = await refreshPartUrls(sessionId);
+        queueRef.current = refreshedUrls.parts;
+
+        setState((s) => ({ ...s, status: "uploading" }));
+        startWorkers();
+
+      } catch (err: any) {
+        if (userCancelControllerRef.current?.signal.aborted) {
+          setState((s) => ({ ...s, status: "cancelled" }));
+          return;
+        }
+
+        // If it's a genuine network failure during the resume initialization,
+        // do not permanently fail and destroy the session. Reset to idle so the user can try again.
+        if (err instanceof TypeError || err.message === "Failed to fetch" || !navigator.onLine) {
+          setState(initialState);
+          throw new Error("Network unavailable. Please check your connection and try again.");
+        }
+
+        // If the user selects the wrong file, do not destroy the resume session. Let them try again.
+        if (err.message === "The selected file does not match the unfinished upload.") {
+          setState(initialState);
+          throw err;
+        }
+
+        if (err instanceof ApiRequestError) {
+          if ([404, 409].includes(err.status)) {
+            clearActiveUpload();
+          }
+        }
+
+        setState((s) => ({ ...s, status: "failed", errorMessage: err.message || "Failed to resume upload." }));
+        throw err;
+      }
+    },
+    [startWorkers]
+  );
+
+  return { state, upload, resume, cancel, reset };
 }

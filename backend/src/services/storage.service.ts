@@ -11,6 +11,7 @@ export interface IStorageService {
   presignUploadParts(key: string, uploadId: string, totalParts: number): Promise<MultipartPart[]>;
   completeMultipartUpload(key: string, uploadId: string, parts: { partNumber: number; etag: string }[]): Promise<void>;
   abortMultipartUpload(key: string, uploadId: string): Promise<void>;
+  listMultipartUploadParts(key: string, uploadId: string): Promise<Array<{ partNumber: number; etag: string; }>>;
   objectExists(key: string): Promise<boolean>;
   deleteObject(key: string): Promise<void>;
   presignDownloadUrl(key: string, downloadFilename: string): Promise<string>;
@@ -40,6 +41,11 @@ export class MockStorageService implements IStorageService {
 
   async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
     logger.info({ key, uploadId }, "MockStorageService: abortMultipartUpload");
+  }
+
+  async listMultipartUploadParts(key: string, uploadId: string): Promise<Array<{ partNumber: number; etag: string; }>> {
+    logger.info({ key, uploadId }, "MockStorageService: listMultipartUploadParts");
+    return [];
   }
 
   async objectExists(key: string): Promise<boolean> {

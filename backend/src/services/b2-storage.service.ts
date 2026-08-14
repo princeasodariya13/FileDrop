@@ -7,6 +7,7 @@ import {
   HeadObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  ListPartsCommand,
   NotFound
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -75,7 +76,7 @@ export class B2StorageService implements IStorageService {
           UploadId: uploadId,
           PartNumber: partNumber,
         });
-        
+
         const presignedUrl = await getSignedUrl(this.client, command, {
           expiresIn: env.presignedUrlTtlSeconds,
         });
@@ -126,6 +127,47 @@ export class B2StorageService implements IStorageService {
     } catch (err: any) {
       logger.error({ err, key, uploadId }, "B2 abortMultipartUpload failed");
       throw new Error(`STORAGE_ABORT_FAILED: ${err.message}`);
+    }
+  }
+
+  async listMultipartUploadParts(key: string, uploadId: string): Promise<Array<{ partNumber: number; etag: string; }>> {
+    try {
+      const parts: Array<{ partNumber: number; etag: string; }> = [];
+      let isTruncated = true;
+      let partNumberMarker: string | undefined = undefined;
+
+      while (isTruncated) {
+        const command = new ListPartsCommand({
+          Bucket: env.b2BucketName,
+          Key: key,
+          UploadId: uploadId,
+          PartNumberMarker: partNumberMarker,
+        });
+        const response: any = await (this.client as any).send(command);
+
+        if (response.Parts) {
+          for (const part of response.Parts) {
+            if (part.PartNumber !== undefined && part.ETag !== undefined) {
+              parts.push({
+                partNumber: part.PartNumber,
+                etag: part.ETag.replace(/^"|"$/g, ""),
+              });
+            }
+          }
+        }
+
+        isTruncated = response.IsTruncated ?? false;
+        if (isTruncated && response.NextPartNumberMarker) {
+          partNumberMarker = response.NextPartNumberMarker.toString();
+        } else {
+          isTruncated = false;
+        }
+      }
+
+      return parts;
+    } catch (err: any) {
+      logger.error({ err, key, uploadId }, "B2 listMultipartUploadParts failed");
+      throw new Error(`STORAGE_LIST_PARTS_FAILED: ${err.message}`);
     }
   }
 

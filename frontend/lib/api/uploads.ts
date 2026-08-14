@@ -47,3 +47,20 @@ export async function sendHeartbeat(sessionId: string): Promise<void> {
     body: JSON.stringify({ sessionId }),
   });
 }
+
+export interface ResumeSessionResponse {
+  sessionId: string;
+  status: string;
+  fileName: string;
+  sizeBytes: number;
+  mimeType: string;
+  partSizeBytes: number;
+  totalParts: number;
+  parts: { partNumber: number; etag: string }[];
+}
+
+export async function resumeUploadData(sessionId: string): Promise<ResumeSessionResponse> {
+  return apiFetch<ResumeSessionResponse>(`/api/uploads/${sessionId}/resume`, {
+    method: "GET",
+  });
+}

@@ -106,12 +106,12 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
 
     const fileId = session.storageKey.split("/")[1];
     const sanitizedName = sanitizeFilename(session.originalName);
-    
+
     // Safely support new expirationSeconds and legacy expirationHours uploads.
-    const durationMs = session.expirationSeconds 
-      ? session.expirationSeconds * 1000 
+    const durationMs = session.expirationSeconds
+      ? session.expirationSeconds * 1000
       : (session.expirationHours ?? env.defaultExpirationHours) * 60 * 60 * 1000;
-    
+
     const uploadedAt = new Date();
     const expiresAt = new Date(uploadedAt.getTime() + durationMs);
 
@@ -167,7 +167,7 @@ export async function abortUpload(req: Request, res: Response, next: NextFunctio
         { $set: { cleanupClaimedAt: new Date() } },
         { new: true }
       );
-      
+
       if (!lockedSession) {
         const current = await UploadSessionModel.findOne({ sessionId: input.sessionId });
         return ok(res, { sessionId: input.sessionId, status: current?.status ?? session.status });
@@ -197,14 +197,14 @@ export async function heartbeatUpload(req: Request, res: Response, next: NextFun
   try {
     const input = heartbeatUploadSchema.parse(req.body);
     const session = await UploadSessionModel.findOneAndUpdate(
-      { 
-        sessionId: input.sessionId, 
-        status: { $in: ["initializing", "uploading", "completing"] } 
+      {
+        sessionId: input.sessionId,
+        status: { $in: ["initializing", "uploading", "completing"] }
       },
       { $set: { lastUploadActivityAt: new Date() } },
       { new: true }
     );
-    
+
     if (!session) {
       // Return 404 or just 200? The user may have been disconnected and session was cleaned.
       // If we throw, the frontend might stop. We should probably return 200 with an indicator, or throw 404.
@@ -213,6 +213,54 @@ export async function heartbeatUpload(req: Request, res: Response, next: NextFun
     }
 
     return ok(res, { success: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** GET /api/uploads/:sessionId/resume — Fetch session metadata and uploaded parts for cross-refresh resume */
+export async function resumeUpload(req: Request, res: Response, next: NextFunction) {
+  try {
+    const sessionId = req.params.sessionId;
+    if (!sessionId || typeof sessionId !== "string") {
+      throw new ApiError(400, "INVALID_SESSION_ID", "Session ID is required.");
+    }
+
+    const session = await UploadSessionModel.findOne({ sessionId });
+
+    if (!session) {
+      throw new ApiError(404, "SESSION_NOT_FOUND", "Upload session not found.");
+    }
+
+    if (session.status === "completed") {
+      throw new ApiError(409, "SESSION_COMPLETED", "This upload session has already been completed.");
+    }
+
+    if (["aborted", "failed"].includes(session.status)) {
+      throw new ApiError(409, "SESSION_ABORTED", "This upload session was aborted or failed.");
+    }
+
+    if (session.cleanupClaimedAt) {
+      throw new ApiError(409, "SESSION_CLEANED", "This upload session has expired and was cleaned up.");
+    }
+
+    // A session is allowed to resume if it's "uploading", "initializing", or "completing".
+    // "completing" means the client previously sent completeUpload but refreshed before getting the response,
+    // or it failed. We allow them to resume, fetch parts, and they can attempt completeUpload again.
+
+    // Fetch the list of parts already safely stored in B2
+    const parts = await storage.listMultipartUploadParts(session.storageKey, session.storageUploadId);
+
+    return ok(res, {
+      sessionId: session.sessionId,
+      status: session.status,
+      fileName: session.originalName,
+      sizeBytes: session.sizeBytes,
+      mimeType: session.mimeType,
+      partSizeBytes: session.partSizeBytes,
+      totalParts: session.totalParts,
+      parts,
+    });
   } catch (err) {
     next(err);
   }
