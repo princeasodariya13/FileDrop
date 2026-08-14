@@ -24,12 +24,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                let isLight = false;
+                let isLight = true;
                 const saved = localStorage.getItem("filedrop-theme");
-                if (saved === "light") {
-                  isLight = true;
-                } else if (!saved && window.matchMedia("(prefers-color-scheme: light)").matches) {
-                  isLight = true;
+                if (saved === "dark") {
+                  isLight = false;
                 }
                 if (isLight) {
                   document.documentElement.classList.add("light");

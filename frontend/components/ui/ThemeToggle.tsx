@@ -3,23 +3,18 @@
 import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">("light");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     // 1. Check localStorage
     const saved = localStorage.getItem("filedrop-theme");
-    if (saved === "light" || saved === "dark") {
-      setTheme(saved);
-      document.documentElement.classList.toggle("light", saved === "light");
+    if (saved === "dark") {
+      setTheme("dark");
     } else {
-      // 2. Check system preference
-      const prefersLight = window.matchMedia("(prefers-color-scheme: light)").matches;
-      if (prefersLight) {
-        setTheme("light");
-        document.documentElement.classList.add("light");
-      }
+      setTheme("light");
+      document.documentElement.classList.add("light");
     }
   }, []);
 
