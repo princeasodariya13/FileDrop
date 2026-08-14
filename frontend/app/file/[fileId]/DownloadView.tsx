@@ -9,11 +9,37 @@ import { ApiRequestError } from "@/lib/api/client";
 import { FileInfoResponse } from "@/types/upload";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 
+function getExpiryText(expiresAt: string) {
+  const remainingMs = new Date(expiresAt).getTime() - Date.now();
+  if (remainingMs <= 0) return "expired";
+  
+  const totalMinutes = Math.max(1, Math.floor(remainingMs / 60000));
+  
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    if (mins === 0) return `expires in ${hours}h`;
+    return `expires in ${hours}h ${mins}m`;
+  }
+  
+  return `expires in ${totalMinutes}m`;
+}
+
 function DownloadCard({ file }: { file: FileInfoResponse }) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const { push } = useToast();
+  
+  const [expiryText, setExpiryText] = useState(() => getExpiryText(file.expiresAt));
+
+  useEffect(() => {
+    setExpiryText(getExpiryText(file.expiresAt));
+    const interval = setInterval(() => {
+      setExpiryText(getExpiryText(file.expiresAt));
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [file.expiresAt]);
 
   // Cleanup heartbeat on unmount
   useEffect(() => {
@@ -63,7 +89,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
         <div>
           <p className="text-lg font-bold text-ink-50 font-heading tracking-tight">{file.fileName}</p>
           <p className="mt-2 text-sm text-ink-400 font-mono">
-            {formatBytes(file.sizeBytes)} <span className="text-ink-600 mx-1">•</span> expires {formatRelativeExpiry(file.expiresAt)}
+            {formatBytes(file.sizeBytes)} <span className="text-ink-600 mx-1">•</span> {expiryText}
             {file.downloadLimit
               ? <><span className="text-ink-600 mx-1">•</span> {Math.max(0, file.downloadLimit - file.downloadCount)} left</>
               : ""}
