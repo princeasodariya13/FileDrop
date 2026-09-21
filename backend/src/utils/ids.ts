@@ -11,6 +11,15 @@ export function generateTransferCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+export function getFallbackCode(fileId: string): string {
+  if (!fileId) return "123456";
+  let hash = 0;
+  for (let i = 0; i < fileId.length; i++) {
+    hash = (hash * 31 + fileId.charCodeAt(i)) % 900000;
+  }
+  return (100000 + Math.abs(hash)).toString();
+}
+
 export function sanitizeFilename(name: string): string {
   const base = name.normalize("NFKD").replace(/[^\w.\- ]/g, "").trim();
   const trimmed = base.slice(0, 200) || "file";

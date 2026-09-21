@@ -35,6 +35,8 @@ export async function getFileInfo(req: Request, res: Response, next: NextFunctio
   }
 }
 
+import { getFallbackCode } from "@/utils/ids";
+
 /** GET /api/files/code/:code — lookup file metadata using 6-digit transfer code */
 export async function getFileInfoByCode(req: Request, res: Response, next: NextFunction) {
   try {
@@ -44,7 +46,22 @@ export async function getFileInfoByCode(req: Request, res: Response, next: NextF
     }
 
     const code = rawCode.trim();
-    const file = await FileModel.findOne({ code, status: "active" });
+    let file = await FileModel.findOne({ code, status: "active" });
+
+    if (!file) {
+      // Search active files to match by fallback code or fileId
+      const activeFiles = await FileModel.find({ status: "active" });
+      for (const f of activeFiles) {
+        if (f.code === code || f.fileId === code || getFallbackCode(f.fileId) === code) {
+          file = f;
+          if (!f.code) {
+            f.code = code;
+            await f.save().catch(() => {});
+          }
+          break;
+        }
+      }
+    }
 
     if (!file) {
       throw new ApiError(404, "FILE_NOT_FOUND", "Invalid 6-digit code or file is no longer available.");
@@ -55,7 +72,7 @@ export async function getFileInfoByCode(req: Request, res: Response, next: NextF
 
     return ok(res, {
       fileId: file.fileId,
-      code: file.code,
+      code: file.code || getFallbackCode(file.fileId),
       fileName: file.originalName,
       sizeBytes: file.sizeBytes,
       mimeType: file.mimeType,

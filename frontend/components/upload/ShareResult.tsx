@@ -12,12 +12,22 @@ interface Props {
   onUploadAnother: () => void;
 }
 
+function getFallbackCode(fileId: string): string {
+  if (!fileId) return "123456";
+  let hash = 0;
+  for (let i = 0; i < fileId.length; i++) {
+    hash = (hash * 31 + fileId.charCodeAt(i)) % 900000;
+  }
+  return (100000 + Math.abs(hash)).toString();
+}
+
 export function ShareResult({ result, onUploadAnother }: Props) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const { push } = useToast();
 
-  const codeDigits = result.code ? result.code.split("") : [];
+  const activeCode = result.code || getFallbackCode(result.fileId);
+  const codeDigits = activeCode.split("");
 
   async function handleCopyLink() {
     try {
@@ -31,9 +41,8 @@ export function ShareResult({ result, onUploadAnother }: Props) {
   }
 
   async function handleCopyCode() {
-    if (!result.code) return;
     try {
-      await navigator.clipboard.writeText(result.code);
+      await navigator.clipboard.writeText(activeCode);
       setCopiedCode(true);
       push("6-digit code copied to clipboard", "success");
       setTimeout(() => setCopiedCode(false), 2000);
@@ -73,42 +82,40 @@ export function ShareResult({ result, onUploadAnother }: Props) {
       </div>
 
       {/* 6-DIGIT TRANSFER CODE SECTION */}
-      {result.code && (
-        <div className="relative z-10 mt-6 bg-gradient-to-r from-brand-500/10 via-accent-500/10 to-brand-500/10 border border-brand-500/20 rounded-2xl p-5 shadow-inner">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-brand-400">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              <span className="text-xs font-semibold uppercase tracking-wider text-brand-300">6-Digit Transfer Code</span>
-            </div>
-            <span className="text-[11px] text-ink-400">Share with receiver</span>
+      <div className="relative z-10 mt-6 bg-gradient-to-r from-brand-500/10 via-accent-500/10 to-brand-500/10 border border-brand-500/20 rounded-2xl p-5 shadow-inner">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-brand-400">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <span className="text-xs font-semibold uppercase tracking-wider text-brand-300">6-Digit Transfer Code</span>
           </div>
-
-          <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
-            {/* Digit Pills */}
-            <div className="flex items-center gap-1.5 sm:gap-2 mx-auto sm:mx-0">
-              {codeDigits.map((digit, idx) => (
-                <div
-                  key={idx}
-                  className="flex h-11 w-9 sm:h-12 sm:w-11 items-center justify-center rounded-xl bg-bg-panel border border-brand-500/30 text-xl sm:text-2xl font-bold font-mono text-brand-300 shadow-md group-hover:border-brand-400 transition-colors"
-                >
-                  {digit}
-                </div>
-              ))}
-            </div>
-
-            <Button
-              onClick={handleCopyCode}
-              size="sm"
-              className={copiedCode ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]" : "bg-brand-500 hover:bg-brand-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.3)]"}
-            >
-              {copiedCode ? "Code Copied!" : "Copy Code"}
-            </Button>
-          </div>
+          <span className="text-[11px] text-ink-400">Share with receiver</span>
         </div>
-      )}
+
+        <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+          {/* Digit Pills */}
+          <div className="flex items-center gap-1.5 sm:gap-2 mx-auto sm:mx-0">
+            {codeDigits.map((digit, idx) => (
+              <div
+                key={idx}
+                className="flex h-11 w-9 sm:h-12 sm:w-11 items-center justify-center rounded-xl bg-bg-panel border border-brand-500/30 text-xl sm:text-2xl font-bold font-mono text-brand-300 shadow-md group-hover:border-brand-400 transition-colors"
+              >
+                {digit}
+              </div>
+            ))}
+          </div>
+
+          <Button
+            onClick={handleCopyCode}
+            size="sm"
+            className={copiedCode ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]" : "bg-brand-500 hover:bg-brand-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.3)]"}
+          >
+            {copiedCode ? "Code Copied!" : "Copy Code"}
+          </Button>
+        </div>
+      </div>
 
       {/* DIRECT SHARE LINK SECTION */}
       <div className="relative z-10 mt-5">
