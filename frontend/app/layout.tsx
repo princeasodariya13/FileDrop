@@ -64,6 +64,9 @@ export const metadata: Metadata = {
       "Upload and share large files with FileDrop. Send files up to 10GB using simple share links with automatic expiration.",
     images: ["/logo.png"],
   },
+  verification: {
+    google: "jL2-mH0VIO0U4cOAVCRPIteZ1fjXh2YXo43r-kQ5NNg",
+  },
 };
 
 export default function RootLayout({
