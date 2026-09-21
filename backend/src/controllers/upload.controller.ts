@@ -107,16 +107,6 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
     const fileId = session.storageKey.split("/")[1];
     const sanitizedName = sanitizeFilename(session.originalName);
 
-    // Generate a unique 6-digit code for fast receiver transfer
-    let code = generateTransferCode();
-    let attempts = 0;
-    while (attempts < 5) {
-      const existingCode = await FileModel.findOne({ code, status: "active", expiresAt: { $gt: new Date() } });
-      if (!existingCode) break;
-      code = generateTransferCode();
-      attempts++;
-    }
-
     // Safely support new expirationSeconds and legacy expirationHours uploads.
     const durationMs = session.expirationSeconds
       ? session.expirationSeconds * 1000
@@ -127,22 +117,46 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
 
     const possessionToken = crypto.randomBytes(32).toString("hex");
 
-    const file = await FileModel.create({
-      fileId,
-      code,
-      originalName: session.originalName,
-      sanitizedName,
-      sizeBytes: session.sizeBytes,
-      mimeType: session.mimeType,
-      storageKey: session.storageKey,
-      possessionToken,
-      status: "active",
-      downloadLimit: session.downloadLimit,
-      downloadCount: 0,
-      expiresAt,
-      inactivityTimerStartsAt: uploadedAt,
-      reservationId: session.reservationId,
-    });
+    // Atomically create file document with collision-free unique 6-digit code
+    let file;
+    let attempts = 0;
+    while (attempts < 10) {
+      const codeCandidate = generateTransferCode();
+      const existing = await FileModel.findOne({ code: codeCandidate, status: "active", expiresAt: { $gt: new Date() } });
+      if (existing) {
+        attempts++;
+        continue;
+      }
+      try {
+        file = await FileModel.create({
+          fileId,
+          code: codeCandidate,
+          originalName: session.originalName,
+          sanitizedName,
+          sizeBytes: session.sizeBytes,
+          mimeType: session.mimeType,
+          storageKey: session.storageKey,
+          possessionToken,
+          status: "active",
+          downloadLimit: session.downloadLimit,
+          downloadCount: 0,
+          expiresAt,
+          inactivityTimerStartsAt: uploadedAt,
+          reservationId: session.reservationId,
+        });
+        break;
+      } catch (err: any) {
+        if (err.code === 11000 && err.keyPattern?.code) {
+          attempts++;
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!file) {
+      throw new ApiError(500, "CODE_GENERATION_FAILED", "Could not generate a unique transfer code. Please try again.");
+    }
 
     await commitReservation(session.reservationId as never);
 
