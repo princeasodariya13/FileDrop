@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { DownloadView } from "./DownloadView";
 import { FileInfoResponse } from "@/types/upload";
 
@@ -14,6 +15,22 @@ async function fetchFileInfo(fileId: string): Promise<{ file: FileInfoResponse |
   } catch {
     return { file: null, error: "Couldn't reach the server. Please try again." };
   }
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ fileId: string }> }): Promise<Metadata> {
+  const resolvedParams = await params;
+  const { file } = await fetchFileInfo(resolvedParams.fileId);
+
+  return {
+    title: file ? `Download ${file.fileName}` : "Download Shared File",
+    description: "Download shared file securely on FileDrop.",
+    robots: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+      nocache: true,
+    },
+  };
 }
 
 export default async function FilePage({ params }: { params: Promise<{ fileId: string }> }) {

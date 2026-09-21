@@ -1,13 +1,69 @@
+import { Inter, Outfit } from "next/font/google";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import "./globals.css";
 
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
+  display: "swap",
+});
+
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://file-drop-free.vercel.app";
+
 export const metadata: Metadata = {
-  title: "FileDrop — Send large files, simply",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "FileDrop — Send Large Files, Simply",
+    template: "%s | FileDrop",
+  },
   description:
-    "Upload a file, get a link, share it. Files up to 10GB with automatic expiration.",
+    "Upload and share large files with FileDrop. Send files up to 10GB using simple share links with automatic expiration.",
+  applicationName: "FileDrop",
+  keywords: [
+    "file sharing",
+    "send large files",
+    "temporary file transfer",
+    "free file upload",
+    "file drop",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    title: "FileDrop — Send Large Files, Simply",
+    description:
+      "Upload and share large files with FileDrop. Send files up to 10GB using simple share links with automatic expiration.",
+    url: siteUrl,
+    siteName: "FileDrop",
+    locale: "en_US",
+    type: "website",
+    images: [
+      {
+        url: "/logo.png",
+        alt: "FileDrop Logo",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "FileDrop — Send Large Files, Simply",
+    description:
+      "Upload and share large files with FileDrop. Send files up to 10GB using simple share links with automatic expiration.",
+    images: ["/logo.png"],
+  },
 };
 
 export default function RootLayout({
@@ -16,11 +72,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} ${outfit.variable}`} suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -43,7 +96,7 @@ export default function RootLayout({
           <div className="mx-auto max-w-5xl px-4 sm:px-6 py-4 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3 focus-ring rounded-lg group">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl overflow-hidden shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow">
-                <Image src="/logo.png" alt="FileDrop Logo" width={36} height={36} className="object-cover scale-150" />
+                <Image src="/logo.png" alt="FileDrop Logo" width={36} height={36} priority className="object-cover scale-150" />
               </span>
               <span className="font-heading font-semibold text-xl tracking-tight text-ink-50 group-hover:text-brand-500 transition-colors">FileDrop</span>
             </Link>
