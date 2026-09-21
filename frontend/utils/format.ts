@@ -21,10 +21,27 @@ export function formatEta(seconds: number | null): string {
   return `${hours}h ${minutes % 60}m left`;
 }
 
-export function formatRelativeExpiry(iso: string): string {
-  const diffMs = new Date(iso).getTime() - Date.now();
+export function formatRelativeExpiry(iso: string, nowMs: number = Date.now()): string {
+  const diffMs = new Date(iso).getTime() - nowMs;
   if (diffMs <= 0) return "expired";
-  const hours = Math.round(diffMs / (1000 * 60 * 60));
-  if (hours < 24) return `in ${hours}h`;
-  return `in ${Math.round(hours / 24)}d`;
+
+  const totalSecs = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+
+  if (minutes < 1) {
+    return `in ${secs}s`;
+  }
+  if (minutes < 60) {
+    return secs > 0 ? `in ${minutes}m ${secs}s` : `in ${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMins = minutes % 60;
+  if (hours < 24) {
+    return remainingMins > 0 ? `in ${hours}h ${remainingMins}m` : `in ${hours}h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  return `in ${days}d`;
 }

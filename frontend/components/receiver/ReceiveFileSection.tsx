@@ -87,6 +87,7 @@ export function ReceiveFileSection() {
   }, [fullCode]);
 
   function handleChange(index: number, value: string) {
+    if (error) setError(null);
     // Clean input to keep digits only
     const digit = value.replace(/\D/g, "").slice(-1);
     
@@ -100,12 +101,14 @@ export function ReceiveFileSection() {
   }
 
   function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (error) setError(null);
     if (e.key === "Backspace" && !digits[index] && index > 0) {
       inputRefs[index - 1].current?.focus();
     }
   }
 
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    if (error) setError(null);
     e.preventDefault();
     const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     if (!pasted) return;
@@ -126,6 +129,15 @@ export function ReceiveFileSection() {
     setError(null);
     setTimeout(() => inputRefs[0].current?.focus(), 100);
   }
+
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function handleDirectDownload() {
     if (!foundFile) return;
@@ -170,14 +182,26 @@ export function ReceiveFileSection() {
                 onChange={(e) => handleChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
                 onPaste={handlePaste}
-                className="h-12 w-10 sm:h-14 sm:w-12 text-center text-xl sm:text-2xl font-bold font-mono bg-surface border border-surface-hover rounded-xl text-brand-300 focus:border-brand-400 focus:bg-brand-500/10 focus:ring-2 focus:ring-brand-500/40 transition-all outline-none"
+                className={`h-12 w-10 sm:h-14 sm:w-12 text-center text-xl sm:text-2xl font-bold font-mono rounded-xl transition-all outline-none ${
+                  error
+                    ? "bg-red-500/10 border-2 border-red-500/50 text-red-300 focus:border-red-400 focus:ring-2 focus:ring-red-500/30"
+                    : "bg-surface border border-surface-hover text-brand-300 focus:border-brand-400 focus:bg-brand-500/10 focus:ring-2 focus:ring-brand-500/40"
+                }`}
               />
             ))}
           </div>
 
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-center animate-fade-in-scale">
-              <p role="alert" className="text-xs sm:text-sm font-medium text-red-400">
+            <div className="p-4 bg-red-500/15 border border-red-500/30 rounded-2xl text-center shadow-lg animate-fade-in-scale space-y-1">
+              <div className="flex items-center justify-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span>Incorrect Code</span>
+              </div>
+              <p role="alert" className="text-xs sm:text-sm font-medium text-red-200">
                 {error}
               </p>
             </div>
@@ -217,7 +241,7 @@ export function ReceiveFileSection() {
               <div className="min-w-0 flex-1">
                 <h3 className="text-base font-bold text-ink-50 truncate font-heading">{foundFile.fileName}</h3>
                 <p className="mt-1 text-xs text-ink-400 font-mono">
-                  {formatBytes(foundFile.sizeBytes)} <span className="text-ink-600 mx-1">•</span> expires {formatRelativeExpiry(foundFile.expiresAt)}
+                  {formatBytes(foundFile.sizeBytes)} <span className="text-ink-600 mx-1">•</span> expires {formatRelativeExpiry(foundFile.expiresAt, now)}
                 </p>
               </div>
             </div>

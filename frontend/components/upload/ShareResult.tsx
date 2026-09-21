@@ -26,6 +26,15 @@ export function ShareResult({ result, onUploadAnother }: Props) {
   const [copiedCode, setCopiedCode] = useState(false);
   const { push } = useToast();
 
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const activeCode = result.code || getFallbackCode(result.fileId);
   const codeDigits = activeCode.split("");
 
@@ -77,7 +86,7 @@ export function ShareResult({ result, onUploadAnother }: Props) {
           <span className="text-xs sm:text-sm font-bold tracking-wide uppercase">File Ready to Share</span>
         </div>
         <span className="text-xs text-ink-400 font-mono">
-          expires {formatRelativeExpiry(result.expiresAt)}
+          expires {formatRelativeExpiry(result.expiresAt, now)}
         </span>
       </div>
 

@@ -29,18 +29,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
       return NextResponse.json(body);
     }
     
-    if (backendRes.status !== 404) {
-      return NextResponse.json(
-        body || { success: false, error: { code: "BACKEND_ERROR", message: "Error fetching file." } },
-        { status: backendRes.status }
-      );
+    if (body && body.error) {
+      return NextResponse.json(body, { status: backendRes.status });
     }
   } catch (e) {
     // Ignore proxy error and proceed to fallback
   }
 
   return NextResponse.json(
-    { success: false, error: { code: "FILE_NOT_FOUND", message: "Invalid 6-digit code or file has expired." } },
+    { success: false, error: { code: "INCORRECT_CODE", message: "Incorrect 6-digit code. Please check your code and try again." } },
     { status: 404 }
   );
 }

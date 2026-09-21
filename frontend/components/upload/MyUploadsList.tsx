@@ -2,27 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useMyUploads, MyUpload } from "@/hooks/useMyUploads";
-import { formatBytes } from "@/utils/format";
+import { formatBytes, formatRelativeExpiry } from "@/utils/format";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { deleteFileEarly } from "@/lib/api/files";
 import { Card } from "@/components/ui/Card";
-
-function getExpiryText(expiresAt: string, currentTime: number) {
-  const remainingMs = new Date(expiresAt).getTime() - currentTime;
-  if (remainingMs <= 0) return "expired";
-  
-  const totalMinutes = Math.max(1, Math.floor(remainingMs / 60000));
-  
-  if (totalMinutes >= 60) {
-    const hours = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
-    if (mins === 0) return `expires in ${hours}h`;
-    return `expires in ${hours}h ${mins}m`;
-  }
-  
-  return `expires in ${totalMinutes}m`;
-}
 
 function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: string) => void }) {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
@@ -37,7 +21,7 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
     return () => clearInterval(interval);
   }, []);
 
-  const expiryText = getExpiryText(upload.expiresAt, currentTime);
+  const expiryText = formatRelativeExpiry(upload.expiresAt, currentTime);
 
   const handleCopyLink = async () => {
     try {
@@ -87,7 +71,7 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
             <span>{formatBytes(upload.sizeBytes)}</span>
             <span>&bull;</span>
             <span className={expiryText === "expired" ? "text-red-400" : "text-brand-400"}>
-              {expiryText}
+              {expiryText === "expired" ? "expired" : `expires ${expiryText}`}
             </span>
           </div>
         </div>

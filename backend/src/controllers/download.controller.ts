@@ -46,15 +46,15 @@ export async function getFileInfoByCode(req: Request, res: Response, next: NextF
     const code = rawCode.trim();
     const now = new Date();
 
-    // Query active file strictly matching the unique 6-digit code
-    const file = await FileModel.findOne({
-      code,
-      status: "active",
-      expiresAt: { $gt: now },
-    });
+    // First query file by code to distinguish between incorrect code and expired code
+    const file = await FileModel.findOne({ code });
 
     if (!file) {
-      throw new ApiError(404, "FILE_NOT_FOUND", "Invalid 6-digit code or file has expired.");
+      throw new ApiError(404, "INCORRECT_CODE", "Incorrect 6-digit code. Please check your code and try again.");
+    }
+
+    if (file.status !== "active" || file.expiresAt <= now) {
+      throw new ApiError(410, "FILE_EXPIRED", "This 6-digit transfer code has expired.");
     }
 
     return ok(res, {
