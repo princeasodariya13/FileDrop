@@ -44,6 +44,17 @@ export const downloadUrlLimiter = rateLimit({
   },
 });
 
+export const codeLookupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: "RATE_LIMITED", message: "Too many code lookup attempts. Please slow down." },
+  },
+});
+
 export const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 100,

@@ -17,12 +17,14 @@ let mongod: MongoMemoryServer;
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
-});
+}, 300000);
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongod.stop();
-});
+  if (mongod) {
+    await mongod.stop();
+  }
+}, 300000);
 
 beforeEach(async () => {
   await StorageLedgerModel.deleteMany({});

@@ -31,6 +31,7 @@ export interface CompletedPart {
 
 export interface CompleteUploadResponse {
   fileId: string;
+  code?: string;
   fileName: string;
   sizeBytes: number;
   expiresAt: string;
@@ -41,6 +42,7 @@ export interface CompleteUploadResponse {
 
 export interface FileInfoResponse {
   fileId: string;
+  code?: string;
   fileName: string;
   sizeBytes: number;
   mimeType: string;

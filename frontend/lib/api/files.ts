@@ -5,6 +5,10 @@ export async function getFileInfo(fileId: string): Promise<FileInfoResponse> {
   return apiFetch<FileInfoResponse>(`/api/files/${fileId}`);
 }
 
+export async function getFileInfoByCode(code: string): Promise<FileInfoResponse> {
+  return apiFetch<FileInfoResponse>(`/api/files/code/${encodeURIComponent(code)}`);
+}
+
 export async function deleteFileEarly(fileId: string, possessionToken: string) {
   return apiFetch(`/api/files/${fileId}`, {
     method: "DELETE",

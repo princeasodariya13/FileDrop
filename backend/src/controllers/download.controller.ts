@@ -22,6 +22,40 @@ export async function getFileInfo(req: Request, res: Response, next: NextFunctio
 
     return ok(res, {
       fileId: file.fileId,
+      code: file.code,
+      fileName: file.originalName,
+      sizeBytes: file.sizeBytes,
+      mimeType: file.mimeType,
+      expiresAt: file.expiresAt,
+      downloadLimit: file.downloadLimit,
+      downloadCount: file.downloadCount + file.receiverIds.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** GET /api/files/code/:code — lookup file metadata using 6-digit transfer code */
+export async function getFileInfoByCode(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rawCode = req.params.code;
+    if (!rawCode || typeof rawCode !== "string" || !/^\d{6}$/.test(rawCode.trim())) {
+      throw new ApiError(400, "INVALID_CODE", "Please enter a valid 6-digit code.");
+    }
+
+    const code = rawCode.trim();
+    const file = await FileModel.findOne({ code, status: "active" });
+
+    if (!file) {
+      throw new ApiError(404, "FILE_NOT_FOUND", "Invalid 6-digit code or file is no longer available.");
+    }
+    if (file.expiresAt < new Date()) {
+      throw new ApiError(410, "FILE_EXPIRED", "The file associated with this code has expired.");
+    }
+
+    return ok(res, {
+      fileId: file.fileId,
+      code: file.code,
       fileName: file.originalName,
       sizeBytes: file.sizeBytes,
       mimeType: file.mimeType,

@@ -48,6 +48,16 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
     }
   };
 
+  const handleCopyCode = async () => {
+    if (!upload.code) return;
+    try {
+      await navigator.clipboard.writeText(upload.code);
+      push("6-digit code copied to clipboard", "success");
+    } catch {
+      push("Failed to copy code", "error");
+    }
+  };
+
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
@@ -65,7 +75,14 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
     <Card className="p-4 bg-surface border border-surface-hover relative overflow-hidden animate-fade-in-scale">
       <div className="flex flex-col gap-4">
         <div>
-          <h4 className="text-sm font-medium text-ink-50 truncate">{upload.fileName}</h4>
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-sm font-medium text-ink-50 truncate font-heading">{upload.fileName}</h4>
+            {upload.code && (
+              <span className="shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-brand-500/10 border border-brand-500/20 text-brand-300">
+                Code: {upload.code}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3 mt-1 text-xs text-ink-400 font-mono">
             <span>{formatBytes(upload.sizeBytes)}</span>
             <span>&bull;</span>
@@ -92,10 +109,17 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
           </div>
         ) : (
           <div className="flex items-center justify-between mt-2 pt-4 border-t border-surface">
-            <Button size="sm" variant="ghost" onClick={handleCopyLink} className="text-brand-400 hover:text-brand-300 hover:bg-brand-500/10">
-              Copy Link
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setShowConfirm(true)} className="text-ink-400 hover:text-red-400 hover:bg-red-500/10">
+            <div className="flex items-center gap-2">
+              {upload.code && (
+                <Button size="sm" variant="ghost" onClick={handleCopyCode} className="text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 text-xs px-2.5">
+                  Copy Code
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={handleCopyLink} className="text-ink-300 hover:text-ink-50 hover:bg-surface-hover text-xs px-2.5">
+                Copy Link
+              </Button>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setShowConfirm(true)} className="text-ink-400 hover:text-red-400 hover:bg-red-500/10 text-xs px-2.5">
               Delete
             </Button>
           </div>

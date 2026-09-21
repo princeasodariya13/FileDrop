@@ -16,7 +16,7 @@ import { IStorageService, MultipartPart } from "./storage.service";
 import { logger } from "@/utils/logger";
 
 export class B2StorageService implements IStorageService {
-  private client: S3Client;
+  private client: any;
 
   constructor() {
     assertB2ConfigPresent();

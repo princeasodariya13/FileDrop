@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { env } from "@/config/env";
 import { ok, ApiError } from "@/utils/apiResponse";
-import { sanitizeFilename, buildStorageKey, generateFileId, generateSessionId } from "@/utils/ids";
+import { sanitizeFilename, buildStorageKey, generateFileId, generateSessionId, generateTransferCode } from "@/utils/ids";
 import { createUploadSessionSchema, completeUploadSchema, abortUploadSchema, heartbeatUploadSchema } from "@/validators/upload.validator";
 import { reserveStorage, commitReservation, releaseReservation } from "@/services/storageReservation.service";
 import { storage } from "@/services/storage.service";
@@ -107,6 +107,16 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
     const fileId = session.storageKey.split("/")[1];
     const sanitizedName = sanitizeFilename(session.originalName);
 
+    // Generate a unique 6-digit code for fast receiver transfer
+    let code = generateTransferCode();
+    let attempts = 0;
+    while (attempts < 5) {
+      const existingCode = await FileModel.findOne({ code, status: "active", expiresAt: { $gt: new Date() } });
+      if (!existingCode) break;
+      code = generateTransferCode();
+      attempts++;
+    }
+
     // Safely support new expirationSeconds and legacy expirationHours uploads.
     const durationMs = session.expirationSeconds
       ? session.expirationSeconds * 1000
@@ -119,6 +129,7 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
 
     const file = await FileModel.create({
       fileId,
+      code,
       originalName: session.originalName,
       sanitizedName,
       sizeBytes: session.sizeBytes,
@@ -138,10 +149,11 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
     session.status = "completed";
     await session.save();
 
-    logger.info({ fileId, sizeBytes: file.sizeBytes }, "Upload completed");
+    logger.info({ fileId, code: file.code, sizeBytes: file.sizeBytes }, "Upload completed with transfer code");
 
     return ok(res, {
       fileId: file.fileId,
+      code: file.code,
       fileName: file.originalName,
       sizeBytes: file.sizeBytes,
       expiresAt: file.expiresAt,
