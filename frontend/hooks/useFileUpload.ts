@@ -306,7 +306,12 @@ export function useFileUpload() {
         .map(([partNumber, etag]) => ({ partNumber, etag }))
         .sort((a, b) => a.partNumber - b.partNumber);
 
-      const result = await completeUpload(sessionIdRef.current, partsToComplete);
+      const result = await completeUpload(
+        sessionIdRef.current,
+        partsToComplete,
+        batchCodeRef.current,
+        bundleIdRef.current
+      );
       setState((s) => ({ ...s, status: "success", result }));
     } catch (err: any) {
       if (cancelSignal?.aborted || err.message === "CANCELLED") return;
@@ -319,8 +324,11 @@ export function useFileUpload() {
     }
   }, [updateProgress]);
 
+  const batchCodeRef = useRef<string | undefined>(undefined);
+  const bundleIdRef = useRef<string | undefined>(undefined);
+
   const upload = useCallback(
-    async (file: File, options: UploadOptions) => {
+    async (file: File, options: UploadOptions, batchCode?: string, bundleId?: string) => {
       userCancelControllerRef.current = new AbortController();
       partProgressRef.current = new Map();
       completedPartsRef.current = new Map();
@@ -328,6 +336,8 @@ export function useFileUpload() {
       isPausedRef.current = false;
       isUploadingRef.current = false;
       fileRef.current = file;
+      batchCodeRef.current = batchCode;
+      bundleIdRef.current = bundleId;
 
       try {
         setState({ ...initialState, status: "validating", totalBytes: file.size });

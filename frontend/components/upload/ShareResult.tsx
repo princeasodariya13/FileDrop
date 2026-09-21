@@ -90,12 +90,35 @@ export function ShareResult({ result, onUploadAnother }: Props) {
         </span>
       </div>
 
-      <div className="relative z-10 mt-5 bg-surface border border-surface-hover rounded-xl p-4">
-        <p className="truncate text-sm font-medium text-ink-50 font-heading">{result.fileName}</p>
-        <p className="mt-1 text-xs text-ink-400 font-mono">
-          {formatBytes(result.sizeBytes)}
-          {result.downloadLimit ? <><span className="text-ink-600 mx-1.5">•</span> limit {result.downloadLimit} download{result.downloadLimit > 1 ? "s" : ""}</> : ""}
-        </p>
+      <div className="relative z-10 mt-5 bg-surface border border-surface-hover rounded-xl p-4 space-y-3">
+        {result.files && result.files.length > 1 ? (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-brand-400 uppercase tracking-wider font-mono">
+                {result.files.length} Files in Batch Transfer
+              </span>
+              <span className="text-xs text-ink-400 font-mono">
+                Total: {formatBytes(result.sizeBytes)}
+              </span>
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {result.files.map((f, i) => (
+                <div key={i} className="flex items-center justify-between text-xs py-1.5 px-3 bg-bg-panel/80 rounded-lg border border-surface-hover">
+                  <span className="font-medium text-ink-50 truncate font-heading max-w-[180px] sm:max-w-[260px]">{f.fileName}</span>
+                  <span className="font-mono text-ink-400 shrink-0">{formatBytes(f.sizeBytes)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="truncate text-sm font-medium text-ink-50 font-heading">{result.fileName}</p>
+            <p className="mt-1 text-xs text-ink-400 font-mono">
+              {formatBytes(result.sizeBytes)}
+              {result.downloadLimit ? <><span className="text-ink-600 mx-1.5">•</span> limit {result.downloadLimit} download{result.downloadLimit > 1 ? "s" : ""}</> : ""}
+            </p>
+          </>
+        )}
       </div>
 
       {/* 6-DIGIT TRANSFER CODE SECTION */}

@@ -26,11 +26,13 @@ export async function refreshPartUrls(sessionId: string) {
 
 export async function completeUpload(
   sessionId: string,
-  parts: CompletedPart[]
+  parts: CompletedPart[],
+  batchCode?: string,
+  bundleId?: string
 ): Promise<CompleteUploadResponse> {
   return apiFetch<CompleteUploadResponse>("/api/uploads/complete", {
     method: "POST",
-    body: JSON.stringify({ sessionId, parts }),
+    body: JSON.stringify({ sessionId, parts, code: batchCode, bundleId }),
   });
 }
 

@@ -38,6 +38,7 @@ export interface CompleteUploadResponse {
   downloadLimit: number | null;
   shareUrl: string;
   possessionToken: string;
+  files?: Array<{ fileId: string; fileName: string; sizeBytes: number; shareUrl: string }>;
 }
 
 export interface FileInfoResponse {
@@ -49,6 +50,7 @@ export interface FileInfoResponse {
   expiresAt: string;
   downloadLimit: number | null;
   downloadCount: number;
+  files?: FileInfoResponse[];
 }
 
 export interface ApiErrorBody {

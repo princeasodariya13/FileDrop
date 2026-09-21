@@ -17,6 +17,8 @@ export type CreateUploadSessionInput = z.infer<typeof createUploadSessionSchema>
 
 export const completeUploadSchema = z.object({
   sessionId: z.string().min(1).max(100),
+  code: z.string().optional(),
+  bundleId: z.string().optional(),
   parts: z
     .array(
       z.object({

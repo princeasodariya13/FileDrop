@@ -117,40 +117,63 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
 
     const possessionToken = crypto.randomBytes(32).toString("hex");
 
-    // Atomically create file document with collision-free unique 6-digit code
+    const requestedCode = (input.code as string | undefined)?.trim();
+    const bundleId = (input.bundleId as string | undefined)?.trim();
+
     let file;
-    let attempts = 0;
-    while (attempts < 10) {
-      const codeCandidate = generateTransferCode();
-      const existing = await FileModel.findOne({ code: codeCandidate, status: "active", expiresAt: { $gt: new Date() } });
-      if (existing) {
-        attempts++;
-        continue;
-      }
-      try {
-        file = await FileModel.create({
-          fileId,
-          code: codeCandidate,
-          originalName: session.originalName,
-          sanitizedName,
-          sizeBytes: session.sizeBytes,
-          mimeType: session.mimeType,
-          storageKey: session.storageKey,
-          possessionToken,
-          status: "active",
-          downloadLimit: session.downloadLimit,
-          downloadCount: 0,
-          expiresAt,
-          inactivityTimerStartsAt: uploadedAt,
-          reservationId: session.reservationId,
-        });
-        break;
-      } catch (err: any) {
-        if (err.code === 11000 && err.keyPattern?.code) {
+    if (requestedCode && /^\d{6}$/.test(requestedCode)) {
+      file = await FileModel.create({
+        fileId,
+        code: requestedCode,
+        bundleId,
+        originalName: session.originalName,
+        sanitizedName,
+        sizeBytes: session.sizeBytes,
+        mimeType: session.mimeType,
+        storageKey: session.storageKey,
+        possessionToken,
+        status: "active",
+        downloadLimit: session.downloadLimit,
+        downloadCount: 0,
+        expiresAt,
+        inactivityTimerStartsAt: uploadedAt,
+        reservationId: session.reservationId,
+      });
+    } else {
+      let attempts = 0;
+      while (attempts < 10) {
+        const codeCandidate = generateTransferCode();
+        const existing = await FileModel.findOne({ code: codeCandidate, status: "active", expiresAt: { $gt: new Date() } });
+        if (existing) {
           attempts++;
           continue;
         }
-        throw err;
+        try {
+          file = await FileModel.create({
+            fileId,
+            code: codeCandidate,
+            bundleId,
+            originalName: session.originalName,
+            sanitizedName,
+            sizeBytes: session.sizeBytes,
+            mimeType: session.mimeType,
+            storageKey: session.storageKey,
+            possessionToken,
+            status: "active",
+            downloadLimit: session.downloadLimit,
+            downloadCount: 0,
+            expiresAt,
+            inactivityTimerStartsAt: uploadedAt,
+            reservationId: session.reservationId,
+          });
+          break;
+        } catch (err: any) {
+          if (err.code === 11000 && err.keyPattern?.code) {
+            attempts++;
+            continue;
+          }
+          throw err;
+        }
       }
     }
 

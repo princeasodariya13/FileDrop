@@ -7,29 +7,39 @@ import { formatBytes } from "@/utils/format";
 const MAX_FILE_SIZE_BYTES = 10 * 1024 ** 3; // 10GB — mirrors backend MAX_FILE_SIZE default
 
 interface DropzoneProps {
-  onFileSelected: (file: File) => void;
+  onFilesSelected: (files: File[]) => void;
   disabled?: boolean;
 }
 
-export function Dropzone({ onFileSelected, disabled }: DropzoneProps) {
+export function Dropzone({ onFilesSelected, disabled }: DropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const validateAndSelect = useCallback(
-    (file: File) => {
+    (fileList: FileList | File[]) => {
       setError(null);
-      if (file.size === 0) {
-        setError("This file is empty.");
-        return;
+      const filesArray = Array.from(fileList);
+      if (filesArray.length === 0) return;
+
+      const validFiles: File[] = [];
+      for (const file of filesArray) {
+        if (file.size === 0) {
+          setError(`File "${file.name}" is empty.`);
+          continue;
+        }
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          setError(`File "${file.name}" is too large. Maximum size is ${formatBytes(MAX_FILE_SIZE_BYTES)}.`);
+          continue;
+        }
+        validFiles.push(file);
       }
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        setError(`File is too large. Maximum size is ${formatBytes(MAX_FILE_SIZE_BYTES)}.`);
-        return;
+
+      if (validFiles.length > 0) {
+        onFilesSelected(validFiles);
       }
-      onFileSelected(file);
     },
-    [onFileSelected]
+    [onFilesSelected]
   );
 
   const handleDrop = useCallback(
@@ -37,8 +47,9 @@ export function Dropzone({ onFileSelected, disabled }: DropzoneProps) {
       e.preventDefault();
       setIsDragging(false);
       if (disabled) return;
-      const file = e.dataTransfer.files?.[0];
-      if (file) validateAndSelect(file);
+      if (e.dataTransfer.files?.length) {
+        validateAndSelect(e.dataTransfer.files);
+      }
     },
     [disabled, validateAndSelect]
   );
@@ -49,7 +60,7 @@ export function Dropzone({ onFileSelected, disabled }: DropzoneProps) {
         role="button"
         tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
-        aria-label="Upload a file: drag and drop, or press Enter to browse"
+        aria-label="Upload files: drag and drop, or press Enter to browse"
         onClick={() => !disabled && inputRef.current?.click()}
         onKeyDown={(e) => {
           if (!disabled && (e.key === "Enter" || e.key === " ")) {
@@ -90,18 +101,20 @@ export function Dropzone({ onFileSelected, disabled }: DropzoneProps) {
         </div>
         <div className="relative z-10">
           <p className="text-lg font-medium text-ink-50 font-heading">
-            Drag a file here, or <span className="text-brand-400 group-hover:text-accent-400 transition-colors">browse</span>
+            Drag files here, or <span className="text-brand-400 group-hover:text-accent-400 transition-colors">browse</span>
           </p>
-          <p className="mt-2 text-sm text-ink-400">Up to 10GB · encrypted & secure</p>
+          <p className="mt-2 text-sm text-ink-400">Select multiple files · Up to 10GB per file</p>
         </div>
         <input
           ref={inputRef}
           type="file"
+          multiple
           className="sr-only"
           disabled={disabled}
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) validateAndSelect(file);
+            if (e.target.files?.length) {
+              validateAndSelect(e.target.files);
+            }
             e.target.value = "";
           }}
         />

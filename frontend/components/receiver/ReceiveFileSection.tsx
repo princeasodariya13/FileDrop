@@ -177,15 +177,37 @@ export function ReceiveFileSection() {
     }
   }, [now, foundFile]);
 
-  async function handleDirectDownload() {
-    if (!foundFile) return;
-    setIsDownloading(true);
+  async function handleDownloadSingle(fileId: string) {
     try {
-      const { downloadUrl } = await getDownloadUrl(foundFile.fileId);
+      const { downloadUrl } = await getDownloadUrl(fileId);
       window.location.href = downloadUrl;
       push("Starting file download...", "success");
     } catch (err: any) {
       push(err.message || "Failed to start download.", "error");
+    }
+  }
+
+  async function handleDownloadAll() {
+    if (!foundFile) return;
+    const fileList = foundFile.files && foundFile.files.length > 0 ? foundFile.files : [foundFile];
+    setIsDownloading(true);
+    try {
+      for (let i = 0; i < fileList.length; i++) {
+        const item = fileList[i];
+        const { downloadUrl } = await getDownloadUrl(item.fileId);
+        const a = document.createElement("a");
+        a.href = downloadUrl;
+        a.download = item.fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        if (i < fileList.length - 1) {
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
+      push("Starting file download(s)...", "success");
+    } catch (err: any) {
+      push(err.message || "Failed to start downloads.", "error");
     } finally {
       setIsDownloading(false);
     }
@@ -200,7 +222,7 @@ export function ReceiveFileSection() {
           Receive a File
         </h2>
         <p className="text-xs sm:text-sm text-ink-300">
-          Enter the 6-digit code provided by the sender to retrieve your file instantly.
+          Enter the 6-digit code provided by the sender to retrieve your files instantly.
         </p>
       </div>
 
@@ -251,47 +273,76 @@ export function ReceiveFileSection() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              <span>Verifying code & retrieving file...</span>
+              <span>Verifying code & retrieving files...</span>
             </div>
           )}
         </div>
       ) : (
         /* FOUND FILE PREVIEW & DOWNLOAD CARD */
         <div className="relative z-10 space-y-6 max-w-md mx-auto animate-fade-in-scale">
-          <div className="bg-surface border border-emerald-500/30 rounded-2xl p-5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-3">
+          <div className="bg-surface border border-emerald-500/30 rounded-2xl p-5 relative overflow-hidden space-y-4">
+            <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
                 Code Verified
               </span>
+              <span className="text-xs text-ink-400 font-mono">
+                expires {formatRelativeExpiry(foundFile.expiresAt, now)}
+              </span>
             </div>
 
-            <div className="flex items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-500/20 text-brand-400">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                  <polyline points="10 9 9 9 8 9" />
-                </svg>
+            {foundFile.files && foundFile.files.length > 1 ? (
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center justify-between text-xs font-semibold text-ink-200">
+                  <span>{foundFile.files.length} Files Ready to Download:</span>
+                </div>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {foundFile.files.map((file, idx) => (
+                    <div key={idx} className="flex items-center justify-between gap-3 p-2.5 bg-bg-panel/80 rounded-xl border border-surface-hover">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-ink-50 truncate font-heading">{file.fileName}</p>
+                        <p className="text-[10px] text-ink-400 font-mono">{formatBytes(file.sizeBytes)}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDownloadSingle(file.fileId)}
+                        className="text-xs px-2.5 py-1 text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 shrink-0"
+                      >
+                        Download
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
+            ) : (
+              <div className="flex items-start gap-4 pt-1">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-500/20 text-brand-400">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                  </svg>
+                </div>
 
-              <div className="min-w-0 flex-1">
-                <h3 className="text-base font-bold text-ink-50 truncate font-heading">{foundFile.fileName}</h3>
-                <p className="mt-1 text-xs text-ink-400 font-mono">
-                  {formatBytes(foundFile.sizeBytes)} <span className="text-ink-600 mx-1">•</span> expires {formatRelativeExpiry(foundFile.expiresAt, now)}
-                </p>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-base font-bold text-ink-50 truncate font-heading">{foundFile.fileName}</h3>
+                  <p className="mt-1 text-xs text-ink-400 font-mono">
+                    {formatBytes(foundFile.sizeBytes)}
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
             <Button
               className="flex-1 text-sm py-3"
               disabled={isDownloading}
-              onClick={handleDirectDownload}
+              onClick={handleDownloadAll}
             >
-              {isDownloading ? "Starting Download..." : "Download Now"}
+              {isDownloading ? "Starting Downloads..." : (foundFile.files && foundFile.files.length > 1 ? `Download All (${foundFile.files.length} Files)` : "Download Now")}
             </Button>
             <Button
               variant="ghost"
