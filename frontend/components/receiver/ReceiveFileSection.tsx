@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { getFileInfoByCode, getDownloadUrl } from "@/lib/api/files";
+import { getFileInfoByCode, getFileInfo, getDownloadUrl } from "@/lib/api/files";
 import { FileInfoResponse } from "@/types/upload";
 import { formatBytes, formatRelativeExpiry } from "@/utils/format";
 import { useToast } from "@/components/ui/Toast";
@@ -40,7 +40,36 @@ export function ReceiveFileSection() {
     setFoundFile(null);
 
     try {
-      const file = await getFileInfoByCode(codeToLookup);
+      let file: FileInfoResponse | null = null;
+      try {
+        file = await getFileInfoByCode(codeToLookup);
+      } catch (err: any) {
+        // Fallback: check client-side code map / uploads cache if API route returns 404
+        let fallbackFileId: string | null = null;
+        try {
+          const map = JSON.parse(localStorage.getItem("filedrop_code_map") || "{}");
+          if (map[codeToLookup]) fallbackFileId = map[codeToLookup];
+        } catch (e) {}
+
+        if (!fallbackFileId) {
+          try {
+            const uploads = JSON.parse(localStorage.getItem("filedrop_my_uploads") || "[]");
+            for (const u of uploads) {
+              if (u.code === codeToLookup || u.fileId === codeToLookup) {
+                fallbackFileId = u.fileId;
+                break;
+              }
+            }
+          } catch (e) {}
+        }
+
+        if (fallbackFileId) {
+          file = await getFileInfo(fallbackFileId);
+        } else {
+          throw err;
+        }
+      }
+
       setFoundFile(file);
       push("File found successfully!", "success");
     } catch (err: any) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { formatBytes, formatRelativeExpiry } from "@/utils/format";
@@ -28,6 +28,14 @@ export function ShareResult({ result, onUploadAnother }: Props) {
 
   const activeCode = result.code || getFallbackCode(result.fileId);
   const codeDigits = activeCode.split("");
+
+  useEffect(() => {
+    try {
+      const existing = JSON.parse(localStorage.getItem("filedrop_code_map") || "{}");
+      existing[activeCode] = result.fileId;
+      localStorage.setItem("filedrop_code_map", JSON.stringify(existing));
+    } catch (e) {}
+  }, [activeCode, result.fileId]);
 
   async function handleCopyLink() {
     try {
