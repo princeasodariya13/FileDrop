@@ -42,7 +42,7 @@ const FileSchema = new Schema<IFile>(
     downloadCount: { type: Number, default: 0, min: 0 },
     receiverIds: { type: [String], default: [] },
     expiresAt: { type: Date, required: true },
-    inactivityTimerStartsAt: { type: Date, required: true },
+    inactivityTimerStartsAt: { type: Date, required: true, default: Date.now },
     reservationId: { type: Schema.Types.ObjectId, ref: "StorageReservation", default: null },
   },
   { timestamps: true }

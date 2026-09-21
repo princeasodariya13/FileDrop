@@ -37,6 +37,9 @@ export async function expireOverdueFiles(): Promise<number> {
 
     await releaseActiveStorage(file.sizeBytes);
     file.status = "expired";
+    if (!file.inactivityTimerStartsAt) {
+      file.inactivityTimerStartsAt = file.createdAt || new Date();
+    }
     await file.save();
     count++;
     logger.info({ fileId: file.fileId }, "File expired/deleted and cleaned up");
@@ -135,7 +138,11 @@ export async function expireNoAccessFiles(): Promise<number> {
 
   const overdue = await FileModel.find({
     status: "active",
-    inactivityTimerStartsAt: { $lte: staleThreshold },
+    $or: [
+      { inactivityTimerStartsAt: { $lte: staleThreshold } },
+      { inactivityTimerStartsAt: { $exists: false } },
+      { inactivityTimerStartsAt: null }
+    ]
   }).limit(200);
 
   let count = 0;
@@ -160,6 +167,9 @@ export async function expireNoAccessFiles(): Promise<number> {
     await releaseActiveStorage(file.sizeBytes);
 
     file.status = "expired";
+    if (!file.inactivityTimerStartsAt) {
+      file.inactivityTimerStartsAt = file.createdAt || new Date();
+    }
     await file.save();
 
     count++;

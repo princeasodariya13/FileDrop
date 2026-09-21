@@ -29,6 +29,24 @@ export function ReceiveFileSection() {
 
   const fullCode = digits.join("");
 
+  // Auto-restore previously retrieved unexpired file on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("filedrop_recent_received");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.expiresAt && new Date(parsed.expiresAt).getTime() > Date.now()) {
+          setFoundFile(parsed);
+          if (parsed.code && parsed.code.length === 6) {
+            setDigits(parsed.code.split(""));
+          }
+        } else {
+          localStorage.removeItem("filedrop_recent_received");
+        }
+      }
+    } catch (e) {}
+  }, []);
+
   async function handleLookup(codeToLookup: string) {
     if (codeToLookup.length !== 6 || !/^\d{6}$/.test(codeToLookup)) {
       setError("Please enter a valid 6-digit number code.");
@@ -71,6 +89,12 @@ export function ReceiveFileSection() {
       }
 
       setFoundFile(file);
+      try {
+        localStorage.setItem(
+          "filedrop_recent_received",
+          JSON.stringify({ ...file, code: codeToLookup })
+        );
+      } catch (e) {}
       push("File found successfully!", "success");
     } catch (err: any) {
       setError(err.message || "Invalid code or file has expired.");
@@ -82,9 +106,11 @@ export function ReceiveFileSection() {
   // Auto trigger lookup when 6th digit is entered
   useEffect(() => {
     if (fullCode.length === 6 && /^\d{6}$/.test(fullCode)) {
+      // Prevent redundant lookup if current file already matches
+      if (foundFile && (foundFile as any).code === fullCode) return;
       handleLookup(fullCode);
     }
-  }, [fullCode]);
+  }, [fullCode, foundFile]);
 
   function handleChange(index: number, value: string) {
     if (error) setError(null);
@@ -127,6 +153,9 @@ export function ReceiveFileSection() {
     setDigits(["", "", "", "", "", ""]);
     setFoundFile(null);
     setError(null);
+    try {
+      localStorage.removeItem("filedrop_recent_received");
+    } catch (e) {}
     setTimeout(() => inputRefs[0].current?.focus(), 100);
   }
 
@@ -138,6 +167,15 @@ export function ReceiveFileSection() {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Clear saved file from localStorage when it expires
+  useEffect(() => {
+    if (foundFile && new Date(foundFile.expiresAt).getTime() <= now) {
+      try {
+        localStorage.removeItem("filedrop_recent_received");
+      } catch (e) {}
+    }
+  }, [now, foundFile]);
 
   async function handleDirectDownload() {
     if (!foundFile) return;
@@ -207,15 +245,15 @@ export function ReceiveFileSection() {
             </div>
           )}
 
-          <div className="flex gap-3">
-            <Button
-              className="w-full text-sm py-3"
-              disabled={fullCode.length !== 6 || isSearching}
-              onClick={() => handleLookup(fullCode)}
-            >
-              {isSearching ? "Finding File..." : "Retrieve File"}
-            </Button>
-          </div>
+          {isSearching && (
+            <div className="flex items-center justify-center gap-2 text-brand-400 text-xs font-semibold font-mono animate-pulse py-1">
+              <svg className="animate-spin h-4 w-4 text-brand-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>Verifying code & retrieving file...</span>
+            </div>
+          )}
         </div>
       ) : (
         /* FOUND FILE PREVIEW & DOWNLOAD CARD */
