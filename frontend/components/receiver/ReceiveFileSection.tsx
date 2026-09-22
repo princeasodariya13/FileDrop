@@ -219,10 +219,10 @@ export function ReceiveFileSection() {
 
       <div className="relative z-10 text-center space-y-2 mb-6">
         <h2 className="text-xl sm:text-2xl font-bold font-heading text-ink-50 tracking-tight">
-          Receive a File
+          Receive Files Online
         </h2>
         <p className="text-xs sm:text-sm text-ink-300">
-          Enter the 6-digit code provided by the sender to retrieve your files instantly.
+          Enter the 6-digit code from your file transfer link to receive files without signup.
         </p>
       </div>
 

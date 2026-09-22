@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: { params: Promise<{ fileId: s
 
   return {
     title: file ? `Download ${file.fileName}` : "Download Shared File",
-    description: "Download shared file securely on FileDrop.",
+    description: "Download shared file securely on FileDrop online file transfer service.",
     robots: {
       index: false,
       follow: false,

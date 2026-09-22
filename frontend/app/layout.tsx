@@ -22,18 +22,20 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://file-drop-free.verc
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "FileDrop — Send Large Files, Simply",
+    default: "FileDrop — Free Online File Transfer & Large File Sharing",
     template: "%s | FileDrop",
   },
   description:
-    "Upload and share large files with FileDrop. Send files up to 10GB using simple share links with automatic expiration.",
+    "FileDrop is a free online file sharing platform to send large files up to 10GB. Create secure file transfer links with temporary expiration and no signup required.",
   applicationName: "FileDrop",
   keywords: [
+    "FileDrop",
     "file sharing",
+    "online file transfer",
     "send large files",
-    "temporary file transfer",
-    "free file upload",
-    "file drop",
+    "free file sharing",
+    "temporary file sharing link",
+    "file transfer without signup",
   ],
   alternates: {
     canonical: "/",
@@ -43,9 +45,9 @@ export const metadata: Metadata = {
     follow: true,
   },
   openGraph: {
-    title: "FileDrop — Send Large Files, Simply",
+    title: "FileDrop — Free Online File Transfer & Large File Sharing",
     description:
-      "Upload and share large files with FileDrop. Send files up to 10GB using simple share links with automatic expiration.",
+      "FileDrop is a free online file sharing platform to send large files up to 10GB. Create secure file transfer links with temporary expiration and no signup required.",
     url: siteUrl,
     siteName: "FileDrop",
     locale: "en_US",
@@ -59,9 +61,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary",
-    title: "FileDrop — Send Large Files, Simply",
+    title: "FileDrop — Free Online File Transfer & Large File Sharing",
     description:
-      "Upload and share large files with FileDrop. Send files up to 10GB using simple share links with automatic expiration.",
+      "FileDrop is a free online file sharing platform to send large files up to 10GB. Create secure file transfer links with temporary expiration and no signup required.",
     images: ["/logo.png"],
   },
   verification: {
@@ -110,8 +112,8 @@ export default function RootLayout({
         <main className="flex-1 relative z-10">{children}</main>
         <footer className="border-t border-surface py-8 mt-auto relative z-10">
           <div className="mx-auto max-w-5xl px-4 sm:px-6 text-sm text-ink-400 text-center flex flex-col items-center gap-2">
-            <p>Files are automatically deleted after they expire.</p>
-            <p className="text-xs text-ink-600">Secure • Fast • Simple</p>
+            <p>FileDrop free file sharing service — uploaded files automatically expire and delete.</p>
+            <p className="text-xs text-ink-600">Secure File Transfer • No Registration • Up to 10GB</p>
           </div>
         </footer>
       </body>

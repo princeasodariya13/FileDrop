@@ -159,12 +159,12 @@ export function ShareResult({ result, onUploadAnother }: Props) {
 
       {/* DIRECT SHARE LINK SECTION */}
       <div className="relative z-10 mt-5">
-        <label className="block text-xs font-medium text-ink-400 mb-1.5">Or share direct download link:</label>
+        <label className="block text-xs font-medium text-ink-400 mb-1.5">Or share direct file sharing link:</label>
         <div className="flex items-center gap-2.5">
           <input
             readOnly
             value={result.shareUrl}
-            aria-label="Share link"
+            aria-label="File sharing link"
             onFocus={(e) => e.currentTarget.select()}
             className="focus-ring flex-1 truncate rounded-xl border border-surface-hover bg-surface px-4 py-2.5 text-xs sm:text-sm text-brand-400 font-medium font-mono"
           />

@@ -60,7 +60,7 @@ export function Dropzone({ onFilesSelected, disabled }: DropzoneProps) {
         role="button"
         tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
-        aria-label="Upload files: drag and drop, or press Enter to browse"
+        aria-label="Upload and share files: drag and drop, or press Enter to browse"
         onClick={() => !disabled && inputRef.current?.click()}
         onKeyDown={(e) => {
           if (!disabled && (e.key === "Enter" || e.key === " ")) {
@@ -101,9 +101,9 @@ export function Dropzone({ onFilesSelected, disabled }: DropzoneProps) {
         </div>
         <div className="relative z-10">
           <p className="text-lg font-medium text-ink-50 font-heading">
-            Drag files here, or <span className="text-brand-400 group-hover:text-accent-400 transition-colors">browse</span>
+            Drop &amp; share files, or <span className="text-brand-400 group-hover:text-accent-400 transition-colors">browse files</span>
           </p>
-          <p className="mt-2 text-sm text-ink-400">Select multiple files · Up to 10GB per file</p>
+          <p className="mt-2 text-sm text-ink-400">Upload large files for free file sharing · Up to 10GB per file</p>
         </div>
         <input
           ref={inputRef}
