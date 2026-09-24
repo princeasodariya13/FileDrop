@@ -6,6 +6,70 @@ import { ApiError, ok } from "@/utils/apiResponse";
 import { storage } from "@/services/storage.service";
 import { logger } from "@/utils/logger";
 
+function extractReceiverId(req: Request): string | null {
+  const header = req.headers["x-receiver-id"];
+  if (typeof header === "string" && header.trim()) return header.trim();
+  const bodyId = req.body?.receiverId;
+  if (typeof bodyId === "string" && bodyId.trim()) return bodyId.trim();
+  const queryId = req.query?.receiverId;
+  if (typeof queryId === "string" && queryId.trim()) return queryId.trim();
+  return null;
+}
+
+async function claimOrVerifyReceiverSlot(file: InstanceType<typeof FileModel>, receiverId: string | null): Promise<InstanceType<typeof FileModel>> {
+  if (file.downloadLimit === null) {
+    return file;
+  }
+
+  const now = new Date();
+  const totalOccupiedSlots = file.downloadCount + file.receiverIds.length;
+
+  if (receiverId) {
+    const isAlreadyReceiver = file.receiverIds.includes(receiverId);
+    if (isAlreadyReceiver) {
+      return file;
+    }
+
+    if (totalOccupiedSlots >= file.downloadLimit) {
+      throw new ApiError(
+        410,
+        "DOWNLOAD_LIMIT_REACHED",
+        `This file code has reached its maximum system sharing limit (${file.downloadLimit} system${file.downloadLimit > 1 ? "s" : ""}).`
+      );
+    }
+
+    const updatedFile = (await FileModel.findOneAndUpdate(
+      {
+        _id: file._id,
+        status: "active",
+        expiresAt: { $gt: now },
+        $expr: { $lt: [{ $add: ["$downloadCount", { $size: "$receiverIds" }] }, "$downloadLimit"] },
+      },
+      { $addToSet: { receiverIds: receiverId } },
+      { new: true }
+    )) as InstanceType<typeof FileModel>;
+
+    if (!updatedFile) {
+      throw new ApiError(
+        410,
+        "DOWNLOAD_LIMIT_REACHED",
+        `This file code has reached its maximum system sharing limit (${file.downloadLimit} system${file.downloadLimit > 1 ? "s" : ""}).`
+      );
+    }
+
+    return updatedFile;
+  } else {
+    if (totalOccupiedSlots >= file.downloadLimit) {
+      throw new ApiError(
+        410,
+        "DOWNLOAD_LIMIT_REACHED",
+        `This file code has reached its maximum system sharing limit (${file.downloadLimit} system${file.downloadLimit > 1 ? "s" : ""}).`
+      );
+    }
+    return file;
+  }
+}
+
 /** GET /api/files/:fileId — public metadata for the share/download page */
 export async function getFileInfo(req: Request, res: Response, next: NextFunction) {
   try {
@@ -16,19 +80,19 @@ export async function getFileInfo(req: Request, res: Response, next: NextFunctio
     if (file.expiresAt < new Date()) {
       throw new ApiError(410, "FILE_EXPIRED", "This file has expired.");
     }
-    // We no longer throw 410 for downloadLimit here because an existing receiver
-    // (who already has a slot) must still be able to view the file page and download.
-    // The limit is strictly enforced in generateDownload via the receiverId.
+
+    const receiverId = extractReceiverId(req);
+    const verifiedFile = await claimOrVerifyReceiverSlot(file, receiverId);
 
     return ok(res, {
-      fileId: file.fileId,
-      code: file.code,
-      fileName: file.originalName,
-      sizeBytes: file.sizeBytes,
-      mimeType: file.mimeType,
-      expiresAt: file.expiresAt,
-      downloadLimit: file.downloadLimit,
-      downloadCount: file.downloadCount + file.receiverIds.length,
+      fileId: verifiedFile.fileId,
+      code: verifiedFile.code,
+      fileName: verifiedFile.originalName,
+      sizeBytes: verifiedFile.sizeBytes,
+      mimeType: verifiedFile.mimeType,
+      expiresAt: verifiedFile.expiresAt,
+      downloadLimit: verifiedFile.downloadLimit,
+      downloadCount: verifiedFile.downloadCount + verifiedFile.receiverIds.length,
     });
   } catch (err) {
     next(err);
@@ -57,7 +121,14 @@ export async function getFileInfoByCode(req: Request, res: Response, next: NextF
       throw new ApiError(410, "FILE_EXPIRED", "This 6-digit transfer code has expired.");
     }
 
-    const fileList = activeFiles.map((file) => ({
+    const receiverId = extractReceiverId(req);
+    const verifiedFiles: Array<InstanceType<typeof FileModel>> = [];
+    for (const f of activeFiles) {
+      const verified = await claimOrVerifyReceiverSlot(f, receiverId);
+      verifiedFiles.push(verified);
+    }
+
+    const fileList = verifiedFiles.map((file) => ({
       fileId: file.fileId,
       code: file.code,
       fileName: file.originalName,
@@ -80,11 +151,6 @@ export async function getFileInfoByCode(req: Request, res: Response, next: NextF
 
 /**
  * POST /api/files/:fileId/download — generate a short-lived presigned URL.
- *
- * The download-count increment happens atomically and BEFORE the presigned
- * URL is handed out, using a findOneAndUpdate filter that re-checks the
- * limit server-side. This closes the race window where two concurrent
- * requests for a one-time-download link could otherwise both succeed.
  */
 export async function generateDownload(req: Request, res: Response, next: NextFunction) {
   try {
@@ -98,33 +164,12 @@ export async function generateDownload(req: Request, res: Response, next: NextFu
       throw new ApiError(410, "FILE_EXPIRED", "This file has expired.");
     }
 
-    let receiverId = req.body.receiverId;
-    if (!receiverId || typeof receiverId !== "string" || receiverId.length > 100) {
+    let receiverId = extractReceiverId(req);
+    if (!receiverId) {
       receiverId = crypto.randomBytes(16).toString("hex");
     }
 
-    let file = existing;
-
-    if (existing.downloadLimit !== null) {
-      // It's a limited file. Atomically claim a slot or verify existing slot.
-      file = await FileModel.findOneAndUpdate(
-        {
-          _id: existing._id,
-          status: "active",
-          expiresAt: { $gt: now },
-          $or: [
-            { receiverIds: receiverId }, // Existing receiver
-            { $expr: { $lt: [{ $add: ["$downloadCount", { $size: "$receiverIds" }] }, "$downloadLimit"] } } // New receiver, slot available
-          ],
-        },
-        { $addToSet: { receiverIds: receiverId } },
-        { new: true }
-      ) as typeof existing;
-
-      if (!file) {
-        throw new ApiError(410, "DOWNLOAD_LIMIT_REACHED", "This download limit has been reached.");
-      }
-    }
+    const file = await claimOrVerifyReceiverSlot(existing, receiverId);
 
     const presignedUrl = await storage.presignDownloadUrl(file.storageKey, file.sanitizedName);
 

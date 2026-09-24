@@ -10,10 +10,34 @@ export class ApiRequestError extends Error {
   }
 }
 
+export function getReceiverId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    let id = localStorage.getItem("filedrop_receiver_id");
+    if (!id) {
+      id =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : "rec_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
+      localStorage.setItem("filedrop_receiver_id", id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const receiverId = getReceiverId();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(receiverId ? { "x-receiver-id": receiverId } : {}),
+    ...((init.headers as Record<string, string>) ?? {}),
+  };
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
+    headers,
   });
 
   const body = await res.json().catch(() => null);
