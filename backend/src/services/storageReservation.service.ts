@@ -31,17 +31,21 @@ async function getOrCreateLedger() {
  * there is no read-then-write race window.
  */
 export async function reserveStorage(bytes: number): Promise<IStorageReservation> {
-  await getOrCreateLedger();
-
   const cap = env.maxActiveStorageBytes;
 
+  // Single atomic findOneAndUpdate: creates the ledger if it doesn't exist yet
+  // ($setOnInsert initialises counters to 0 on upsert) and guards against
+  // exceeding the capacity cap — all in one DB round-trip.
   const updated = await StorageLedgerModel.findOneAndUpdate(
     {
       _id: "singleton",
       $expr: { $lte: [{ $add: ["$activeBytes", "$reservedBytes", bytes] }, cap] },
     },
-    { $inc: { reservedBytes: bytes } },
-    { new: true }
+    {
+      $inc: { reservedBytes: bytes },
+      $setOnInsert: { activeBytes: 0 },
+    },
+    { upsert: true, new: true }
   );
 
   if (!updated) {

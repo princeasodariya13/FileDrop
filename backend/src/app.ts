@@ -10,6 +10,7 @@ import { errorHandler, notFoundHandler } from "@/middleware/errorHandler";
 import uploadRoutes from "@/routes/upload.routes";
 import fileRoutes from "@/routes/file.routes";
 import storageRoutes from "@/routes/storage.routes";
+import cronRoutes from "@/routes/cron.routes";
 
 export function createApp() {
   const app = express();
@@ -44,6 +45,7 @@ export function createApp() {
   app.use("/api/uploads", uploadRoutes);
   app.use("/api/files", fileRoutes);
   app.use("/api/storage", storageRoutes);
+  app.use("/api/cron", cronRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

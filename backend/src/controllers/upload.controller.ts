@@ -19,34 +19,38 @@ export async function createUploadSession(req: Request, res: Response, next: Nex
     const fileId = generateFileId();
     const storageKey = buildStorageKey(fileId, sanitizedName);
 
-    // 1. Reserve storage atomically BEFORE talking to the storage provider.
-    const reservation = await reserveStorage(input.sizeBytes);
+    const partSize = env.multipartPartSizeBytes;
+    const totalParts = Math.max(1, Math.ceil(input.sizeBytes / partSize));
+
+    // Run storage reservation and multipart upload creation concurrently.
+    // They are independent: one is a DB atomic write, the other is an outbound
+    // B2 API call. Running them in parallel halves this part of the latency.
+    const [reservation, uploadId] = await Promise.all([
+      reserveStorage(input.sizeBytes),
+      storage.createMultipartUpload(storageKey, input.mimeType),
+    ]);
 
     try {
-      // 2. Create the multipart upload on storage.
-      const uploadId = await storage.createMultipartUpload(storageKey, input.mimeType);
-
-      const partSize = env.multipartPartSizeBytes;
-      const totalParts = Math.max(1, Math.ceil(input.sizeBytes / partSize));
-
-      const session = await UploadSessionModel.create({
-        sessionId: generateSessionId(),
-        storageKey,
-        storageUploadId: uploadId,
-        originalName: input.fileName,
-        sizeBytes: input.sizeBytes,
-        mimeType: input.mimeType,
-        partSizeBytes: partSize,
-        totalParts,
-        status: "uploading",
-        reservationId: reservation._id,
-        downloadLimit: input.downloadLimit ?? null,
-        expirationSeconds: input.expirationSeconds ?? 3600, // default 1 hour
-        clientIp: req.ip ?? "unknown",
-      });
-
-      // 3. Presign URLs for every part up front (client uploads directly to storage).
-      const parts = await storage.presignUploadParts(storageKey, uploadId, totalParts);
+      // Presign all part URLs and persist the session concurrently.
+      // presignUploadParts now signs all URLs in parallel internally too.
+      const [parts, session] = await Promise.all([
+        storage.presignUploadParts(storageKey, uploadId, totalParts),
+        UploadSessionModel.create({
+          sessionId: generateSessionId(),
+          storageKey,
+          storageUploadId: uploadId,
+          originalName: input.fileName,
+          sizeBytes: input.sizeBytes,
+          mimeType: input.mimeType,
+          partSizeBytes: partSize,
+          totalParts,
+          status: "uploading",
+          reservationId: reservation._id,
+          downloadLimit: input.downloadLimit ?? null,
+          expirationSeconds: input.expirationSeconds ?? 3600,
+          clientIp: req.ip ?? "unknown",
+        }),
+      ]);
 
       logger.info({ sessionId: session.sessionId, sizeBytes: input.sizeBytes }, "Upload session created");
 

@@ -68,25 +68,25 @@ export class B2StorageService implements IStorageService {
 
   async presignUploadParts(key: string, uploadId: string, totalParts: number): Promise<MultipartPart[]> {
     try {
-      const parts: MultipartPart[] = [];
-      for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
-        const command = new UploadPartCommand({
-          Bucket: env.b2BucketName,
-          Key: key,
-          UploadId: uploadId,
-          PartNumber: partNumber,
-        });
-
-        const presignedUrl = await getSignedUrl(this.client, command, {
-          expiresIn: env.presignedUrlTtlSeconds,
-        });
-
-        parts.push({
-          partNumber,
-          presignedUrl,
-        });
-      }
-      return parts;
+      // Sign all part URLs in parallel — dramatically faster than sequential signing
+      // (was N × RTT, now ~1 RTT regardless of part count)
+      const partNumbers = Array.from({ length: totalParts }, (_, i) => i + 1);
+      const parts = await Promise.all(
+        partNumbers.map(async (partNumber) => {
+          const command = new UploadPartCommand({
+            Bucket: env.b2BucketName,
+            Key: key,
+            UploadId: uploadId,
+            PartNumber: partNumber,
+          });
+          const presignedUrl = await getSignedUrl(this.client, command, {
+            expiresIn: env.presignedUrlTtlSeconds,
+          });
+          return { partNumber, presignedUrl };
+        })
+      );
+      // Return sorted by part number for safety
+      return parts.sort((a, b) => a.partNumber - b.partNumber);
     } catch (err: any) {
       logger.error({ err, key, uploadId }, "B2 presignUploadParts failed");
       throw new Error(`STORAGE_UPLOAD_FAILED: ${err.message}`);
