@@ -22,17 +22,17 @@ export async function createUploadSession(req: Request, res: Response, next: Nex
     const partSize = env.multipartPartSizeBytes;
     const totalParts = Math.max(1, Math.ceil(input.sizeBytes / partSize));
 
-    // Run storage reservation and multipart upload creation concurrently.
-    // They are independent: one is a DB atomic write, the other is an outbound
-    // B2 API call. Running them in parallel halves this part of the latency.
-    const [reservation, uploadId] = await Promise.all([
-      reserveStorage(input.sizeBytes),
-      storage.createMultipartUpload(storageKey, input.mimeType),
-    ]);
+    // 1. Reserve storage atomically first — must succeed before we touch B2.
+    //    If this fails (capacity exceeded) we haven't created anything in B2.
+    const reservation = await reserveStorage(input.sizeBytes);
 
     try {
-      // Presign all part URLs and persist the session concurrently.
-      // presignUploadParts now signs all URLs in parallel internally too.
+      // 2. Create the multipart upload on B2.
+      const uploadId = await storage.createMultipartUpload(storageKey, input.mimeType);
+
+      // 3. Presign all part URLs and persist the session concurrently.
+      //    Both need uploadId but are independent of each other, so safe to parallel.
+      //    presignUploadParts internally signs all URLs in parallel too (Promise.all).
       const [parts, session] = await Promise.all([
         storage.presignUploadParts(storageKey, uploadId, totalParts),
         UploadSessionModel.create({
