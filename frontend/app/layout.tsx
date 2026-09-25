@@ -2,6 +2,7 @@ import { Inter, Outfit } from "next/font/google";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { Analytics } from "@vercel/analytics/next";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import "./globals.css";
 
@@ -116,6 +117,7 @@ export default function RootLayout({
             <p className="text-xs text-ink-600">Secure File Transfer • No Registration • Up to 10GB</p>
           </div>
         </footer>
+        <Analytics />
       </body>
     </html>
   );
