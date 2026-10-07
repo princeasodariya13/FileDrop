@@ -32,16 +32,11 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
     };
   }, []);
 
-  async function triggerDownload(fileId: string, fileName?: string) {
-    const { downloadUrl, sessionId } = await getDownloadUrl(fileId);
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = fileName || "download";
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  function downloadViaIframe(downloadUrl: string, sessionId: string) {
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = downloadUrl;
+    document.body.appendChild(iframe);
 
     if (!heartbeatRef.current) {
       heartbeatRef.current = setInterval(() => {
@@ -50,13 +45,20 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
         });
       }, 60000);
     }
+
+    setTimeout(() => {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    }, 60000);
   }
 
-  async function handleDownloadSingle(fileId: string, fileName?: string) {
+  async function handleDownloadSingle(fileId: string) {
     setIsDownloading(true);
     setError(null);
     try {
-      await triggerDownload(fileId, fileName);
+      const { downloadUrl, sessionId } = await getDownloadUrl(fileId);
+      downloadViaIframe(downloadUrl, sessionId);
       push("Starting file download...", "success");
     } catch (err) {
       const message =
@@ -72,14 +74,19 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
     setIsDownloading(true);
     setError(null);
     try {
-      for (let i = 0; i < fileList.length; i++) {
-        const item = fileList[i];
-        await triggerDownload(item.fileId, item.fileName);
-        if (i < fileList.length - 1) {
-          await new Promise((r) => setTimeout(r, 600));
+      // 1. Fetch all presigned URLs in parallel
+      const urlPromises = fileList.map((item) => getDownloadUrl(item.fileId));
+      const results = await Promise.all(urlPromises);
+
+      // 2. Trigger iframe downloads with 800ms spacing
+      for (let i = 0; i < results.length; i++) {
+        const { downloadUrl, sessionId } = results[i];
+        downloadViaIframe(downloadUrl, sessionId);
+        if (i < results.length - 1) {
+          await new Promise((r) => setTimeout(r, 800));
         }
       }
-      push("Starting all file downloads...", "success");
+      push(`Downloading all ${fileList.length} files...`, "success");
     } catch (err) {
       const message =
         err instanceof ApiRequestError ? err.message : "Couldn't start downloads. Please try again.";
@@ -131,7 +138,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => handleDownloadSingle(item.fileId, item.fileName)}
+                  onClick={() => handleDownloadSingle(item.fileId)}
                   disabled={isDownloading}
                   className="text-xs px-3 py-1.5 text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 shrink-0"
                 >
@@ -154,7 +161,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
       <div className="relative z-10 mt-6">
         <Button
           className="w-full text-base py-6"
-          onClick={isMulti ? handleDownloadAll : () => handleDownloadSingle(file.fileId, file.fileName)}
+          onClick={isMulti ? handleDownloadAll : () => handleDownloadSingle(file.fileId)}
           disabled={isDownloading}
         >
           {isDownloading

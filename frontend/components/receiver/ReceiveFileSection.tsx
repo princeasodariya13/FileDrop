@@ -177,21 +177,22 @@ export function ReceiveFileSection() {
     }
   }, [now, foundFile]);
 
-  async function triggerDownload(fileId: string, fileName?: string) {
-    const { downloadUrl, fileName: serverName } = await getDownloadUrl(fileId);
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = fileName || serverName || "download";
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  function downloadViaIframe(downloadUrl: string) {
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = downloadUrl;
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      if (document.body.contains(iframe)) {
+        document.body.removeChild(iframe);
+      }
+    }, 60000);
   }
 
-  async function handleDownloadSingle(fileId: string, fileName?: string) {
+  async function handleDownloadSingle(fileId: string) {
     try {
-      await triggerDownload(fileId, fileName);
+      const { downloadUrl } = await getDownloadUrl(fileId);
+      downloadViaIframe(downloadUrl);
       push("Starting file download...", "success");
     } catch (err: any) {
       push(err.message || "Failed to start download.", "error");
@@ -203,14 +204,19 @@ export function ReceiveFileSection() {
     const fileList = foundFile.files && foundFile.files.length > 0 ? foundFile.files : [foundFile];
     setIsDownloading(true);
     try {
-      for (let i = 0; i < fileList.length; i++) {
-        const item = fileList[i];
-        await triggerDownload(item.fileId, item.fileName);
-        if (i < fileList.length - 1) {
-          await new Promise((r) => setTimeout(r, 600));
+      // 1. Fetch all presigned URLs in parallel
+      const urlPromises = fileList.map((item) => getDownloadUrl(item.fileId));
+      const results = await Promise.all(urlPromises);
+
+      // 2. Trigger iframe downloads with 800ms spacing
+      for (let i = 0; i < results.length; i++) {
+        const { downloadUrl } = results[i];
+        downloadViaIframe(downloadUrl);
+        if (i < results.length - 1) {
+          await new Promise((r) => setTimeout(r, 800));
         }
       }
-      push("Starting file download(s)...", "success");
+      push(`Downloading all ${fileList.length} files...`, "success");
     } catch (err: any) {
       push(err.message || "Failed to start downloads.", "error");
     } finally {
