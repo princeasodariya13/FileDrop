@@ -31,6 +31,9 @@ export const metadata: Metadata = {
   description:
     "FileDrop is a free online file sharing platform to send large files up to 10GB. Create secure file transfer links with temporary expiration and no signup required.",
   applicationName: "FileDrop",
+  appleWebApp: {
+    title: "FileDrop",
+  },
   keywords: [
     "FileDrop",
     "file sharing",

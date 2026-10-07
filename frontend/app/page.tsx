@@ -37,18 +37,36 @@ export const metadata: Metadata = {
 
 const jsonLd = {
   "@context": "https://schema.org",
-  "@type": "WebApplication",
-  name: "FileDrop",
-  url: `${siteUrl}/`,
-  description:
-    "Free online file sharing and temporary file transfer platform to send large files online up to 10GB without signup.",
-  applicationCategory: "UtilitiesApplication",
-  operatingSystem: "All",
-  offers: {
-    "@type": "Offer",
-    price: "0",
-    priceCurrency: "USD",
-  },
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${siteUrl}/#website`,
+      url: `${siteUrl}/`,
+      name: "FileDrop",
+      alternateName: ["File Drop", "FileDrop Free"],
+      publisher: {
+        "@type": "Organization",
+        name: "FileDrop",
+        url: `${siteUrl}/`,
+        logo: `${siteUrl}/logo.png`,
+      },
+    },
+    {
+      "@type": "WebApplication",
+      "@id": `${siteUrl}/#webapp`,
+      name: "FileDrop",
+      url: `${siteUrl}/`,
+      description:
+        "Free online file sharing and temporary file transfer platform to send large files online up to 10GB without signup.",
+      applicationCategory: "UtilitiesApplication",
+      operatingSystem: "All",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+      },
+    },
+  ],
 };
 
 export default function HomePage() {
