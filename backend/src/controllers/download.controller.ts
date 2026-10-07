@@ -84,6 +84,53 @@ export async function getFileInfo(req: Request, res: Response, next: NextFunctio
     const receiverId = extractReceiverId(req);
     const verifiedFile = await claimOrVerifyReceiverSlot(file, receiverId);
 
+    // If file is part of a multi-file batch (shares bundleId or code with sibling active files):
+    const now = new Date();
+    let siblingFiles: InstanceType<typeof FileModel>[] = [];
+
+    if (verifiedFile.bundleId) {
+      siblingFiles = await FileModel.find({
+        bundleId: verifiedFile.bundleId,
+        status: "active",
+        expiresAt: { $gt: now },
+      });
+    } else if (verifiedFile.code) {
+      siblingFiles = await FileModel.find({
+        code: verifiedFile.code,
+        status: "active",
+        expiresAt: { $gt: now },
+      });
+    }
+
+    if (!siblingFiles || siblingFiles.length === 0) {
+      siblingFiles = [verifiedFile];
+    }
+
+    const verifiedFiles: InstanceType<typeof FileModel>[] = [];
+    for (const f of siblingFiles) {
+      if (f.fileId === verifiedFile.fileId) {
+        verifiedFiles.push(verifiedFile);
+      } else {
+        try {
+          const verifiedSibling = await claimOrVerifyReceiverSlot(f, receiverId);
+          verifiedFiles.push(verifiedSibling);
+        } catch {
+          // If a sibling exceeded download limit, skip it
+        }
+      }
+    }
+
+    const fileList = verifiedFiles.map((f) => ({
+      fileId: f.fileId,
+      code: f.code,
+      fileName: f.originalName,
+      sizeBytes: f.sizeBytes,
+      mimeType: f.mimeType,
+      expiresAt: f.expiresAt,
+      downloadLimit: f.downloadLimit,
+      downloadCount: f.downloadCount + f.receiverIds.length,
+    }));
+
     return ok(res, {
       fileId: verifiedFile.fileId,
       code: verifiedFile.code,
@@ -93,6 +140,7 @@ export async function getFileInfo(req: Request, res: Response, next: NextFunctio
       expiresAt: verifiedFile.expiresAt,
       downloadLimit: verifiedFile.downloadLimit,
       downloadCount: verifiedFile.downloadCount + verifiedFile.receiverIds.length,
+      files: fileList,
     });
   } catch (err) {
     next(err);

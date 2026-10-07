@@ -26,29 +26,38 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
 
   const expiryText = formatRelativeExpiry(file.expiresAt, currentTime);
 
-  // Cleanup heartbeat on unmount
   useEffect(() => {
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
   }, []);
 
-  async function handleDownload() {
-    setIsDownloading(true);
-    setError(null);
-    try {
-      const { downloadUrl, sessionId } = await getDownloadUrl(file.fileId);
-      window.location.href = downloadUrl;
-      push("Your download is starting", "success");
+  async function triggerDownload(fileId: string, fileName?: string) {
+    const { downloadUrl, sessionId } = await getDownloadUrl(fileId);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = fileName || "download";
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 
-      // Start 60-second heartbeat to keep the download lease alive
-      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    if (!heartbeatRef.current) {
       heartbeatRef.current = setInterval(() => {
         import("@/lib/api/files").then(({ sendHeartbeat }) => {
           sendHeartbeat(sessionId).catch(() => {});
         });
       }, 60000);
+    }
+  }
 
+  async function handleDownloadSingle(fileId: string, fileName?: string) {
+    setIsDownloading(true);
+    setError(null);
+    try {
+      await triggerDownload(fileId, fileName);
+      push("Starting file download...", "success");
     } catch (err) {
       const message =
         err instanceof ApiRequestError ? err.message : "Couldn't start the download. Please try again.";
@@ -57,6 +66,30 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
       setIsDownloading(false);
     }
   }
+
+  async function handleDownloadAll() {
+    const fileList = file.files && file.files.length > 0 ? file.files : [file];
+    setIsDownloading(true);
+    setError(null);
+    try {
+      for (let i = 0; i < fileList.length; i++) {
+        const item = fileList[i];
+        await triggerDownload(item.fileId, item.fileName);
+        if (i < fileList.length - 1) {
+          await new Promise((r) => setTimeout(r, 600));
+        }
+      }
+      push("Starting all file downloads...", "success");
+    } catch (err) {
+      const message =
+        err instanceof ApiRequestError ? err.message : "Couldn't start downloads. Please try again.";
+      setError(message);
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
+  const isMulti = Boolean(file.files && file.files.length > 1);
 
   return (
     <Card className="p-6 relative overflow-hidden animate-fade-in-scale border border-surface-hover group shadow-[0_0_40px_rgba(0,0,0,0.5)]">
@@ -72,15 +105,43 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
         </div>
 
         <div>
-          <p className="text-lg font-bold text-ink-50 font-heading tracking-tight">{file.fileName}</p>
+          <p className="text-lg font-bold text-ink-50 font-heading tracking-tight">
+            {isMulti ? `${file.files!.length} Files Shared` : file.fileName}
+          </p>
           <p className="mt-2 text-sm text-ink-400 font-mono">
-            {formatBytes(file.sizeBytes)} <span className="text-ink-600 mx-1">•</span> expires {expiryText}
+            {isMulti ? formatBytes(file.files!.reduce((a, b) => a + b.sizeBytes, 0)) : formatBytes(file.sizeBytes)}{" "}
+            <span className="text-ink-600 mx-1">•</span> expires {expiryText}
             {file.downloadLimit
               ? <><span className="text-ink-600 mx-1">•</span> {Math.max(0, file.downloadLimit - file.downloadCount)} left</>
               : ""}
           </p>
         </div>
       </div>
+
+      {isMulti && (
+        <div className="relative z-10 mt-6 space-y-3">
+          <p className="text-xs font-semibold text-ink-300 uppercase tracking-wider">Choose a file to download:</p>
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+            {file.files!.map((item) => (
+              <div key={item.fileId} className="flex items-center justify-between gap-3 p-3 bg-bg-panel/80 rounded-xl border border-surface-hover">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-ink-50 truncate font-heading">{item.fileName}</p>
+                  <p className="text-[10px] text-ink-400 font-mono">{formatBytes(item.sizeBytes)}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleDownloadSingle(item.fileId, item.fileName)}
+                  disabled={isDownloading}
+                  className="text-xs px-3 py-1.5 text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 shrink-0"
+                >
+                  Download
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="relative z-10 mt-6 bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
@@ -91,8 +152,16 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
       )}
 
       <div className="relative z-10 mt-6">
-        <Button className="w-full text-base py-6" onClick={handleDownload} disabled={isDownloading}>
-          {isDownloading ? "Preparing download…" : "Download File"}
+        <Button
+          className="w-full text-base py-6"
+          onClick={isMulti ? handleDownloadAll : () => handleDownloadSingle(file.fileId, file.fileName)}
+          disabled={isDownloading}
+        >
+          {isDownloading
+            ? "Preparing download…"
+            : isMulti
+            ? `Download All (${file.files!.length} Files)`
+            : "Download File"}
         </Button>
       </div>
     </Card>

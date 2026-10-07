@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import { createUploadSession, completeUpload, abortUpload, refreshPartUrls, sendHeartbeat, resumeUploadData } from "@/lib/api/uploads";
 import { uploadPartWithProgress, ApiRequestError } from "@/lib/api/client";
-import { CompletedPart, UploadOptions, UploadProgressState } from "@/types/upload";
+import { CompletedPart, UploadOptions, UploadProgressState, CompleteUploadResponse } from "@/types/upload";
 
 const initialState: UploadProgressState = {
   status: "idle",
@@ -69,8 +69,8 @@ export function useFileUpload() {
   const fileRef = useRef<File | null>(null);
   const partSizeRef = useRef<number>(0);
 
-  const startWorkers = useCallback(async () => {
-    if (isUploadingRef.current || isPausedRef.current || !fileRef.current || !sessionIdRef.current) return;
+  const startWorkers = useCallback(async (): Promise<CompleteUploadResponse | null> => {
+    if (isUploadingRef.current || isPausedRef.current || !fileRef.current || !sessionIdRef.current) return null;
     isUploadingRef.current = true;
 
     pauseControllerRef.current = new AbortController();
@@ -286,8 +286,8 @@ export function useFileUpload() {
         ensureWorkers(resolve, reject);
       });
 
-      if (cancelSignal?.aborted) return;
-      if (pauseSignal.aborted || isPausedRef.current) return;
+      if (cancelSignal?.aborted) return null;
+      if (pauseSignal.aborted || isPausedRef.current) return null;
 
       // Verify all expected parts completed
       const totalExpected = queueRef.current.length;
@@ -313,12 +313,14 @@ export function useFileUpload() {
         bundleIdRef.current
       );
       setState((s) => ({ ...s, status: "success", result }));
+      return result;
     } catch (err: any) {
-      if (cancelSignal?.aborted || err.message === "CANCELLED") return;
-      if (pauseSignal.aborted || isPausedRef.current || err.message === "PAUSED") return;
+      if (cancelSignal?.aborted || err.message === "CANCELLED") return null;
+      if (pauseSignal.aborted || isPausedRef.current || err.message === "PAUSED") return null;
 
       const message = err instanceof ApiRequestError ? err.message : "Upload failed. Your file has not been saved.";
       setState((s) => ({ ...s, status: "failed", errorMessage: message }));
+      throw err;
     } finally {
       isUploadingRef.current = false;
     }
@@ -328,7 +330,7 @@ export function useFileUpload() {
   const bundleIdRef = useRef<string | undefined>(undefined);
 
   const upload = useCallback(
-    async (file: File, options: UploadOptions, batchCode?: string, bundleId?: string) => {
+    async (file: File, options: UploadOptions, batchCode?: string, bundleId?: string): Promise<CompleteUploadResponse | null> => {
       userCancelControllerRef.current = new AbortController();
       partProgressRef.current = new Map();
       completedPartsRef.current = new Map();
@@ -370,14 +372,15 @@ export function useFileUpload() {
         } catch (e) {}
 
         setState((s) => ({ ...s, status: "uploading" }));
-        startWorkers();
+        return await startWorkers();
 
       } catch (err: any) {
         if (userCancelControllerRef.current?.signal.aborted) {
           setState((s) => ({ ...s, status: "cancelled" }));
-          return;
+          return null;
         }
         setState((s) => ({ ...s, status: "failed", errorMessage: err.message || "Failed to start upload." }));
+        throw err;
       }
     },
     [startWorkers]

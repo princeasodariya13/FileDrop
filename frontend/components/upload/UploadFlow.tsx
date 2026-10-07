@@ -85,38 +85,38 @@ export function UploadFlow() {
         const file = selectedFiles[i];
         setCurrentUploadingFileName(`File ${i + 1} of ${selectedFiles.length}: ${file.name}`);
         const singleResult = await upload(file, options, batchCode, bundleId);
-        // Note: state.result will be populated when worker completes single file
+        if (singleResult) {
+          completedResults.push(singleResult);
+        }
+      }
+
+      if (completedResults.length > 0) {
+        if (completedResults.length > 1) {
+          const first = completedResults[0];
+          const totalSize = completedResults.reduce((acc, f) => acc + f.sizeBytes, 0);
+          const batch: CompleteUploadResponse = {
+            ...first,
+            code: batchCode,
+            fileName: `${completedResults.length} Files (${completedResults[0].fileName}, +${completedResults.length - 1} more)`,
+            sizeBytes: totalSize,
+            files: completedResults.map((r) => ({
+              fileId: r.fileId,
+              fileName: r.fileName,
+              sizeBytes: r.sizeBytes,
+              shareUrl: r.shareUrl,
+            })),
+          };
+          setBatchResult(batch);
+          addUpload(batch);
+        } else {
+          setBatchResult(completedResults[0]);
+          addUpload(completedResults[0]);
+        }
       }
     } catch (err: any) {
       push(state.errorMessage ?? "Upload failed for one or more files.", "error");
     }
   }
-
-  useEffect(() => {
-    if (state.status === "success" && state.result) {
-      // Update batch result or single result
-      const res = state.result;
-      if (selectedFiles.length > 1) {
-        const totalSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
-        const batch: CompleteUploadResponse = {
-          ...res,
-          fileName: `${selectedFiles.length} Files (${selectedFiles[0].name}, +${selectedFiles.length - 1} more)`,
-          sizeBytes: totalSize,
-          files: selectedFiles.map((f) => ({
-            fileId: res.fileId,
-            fileName: f.name,
-            sizeBytes: f.size,
-            shareUrl: res.shareUrl,
-          })),
-        };
-        setBatchResult(batch);
-        addUpload(batch);
-      } else {
-        setBatchResult(res);
-        addUpload(res);
-      }
-    }
-  }, [state.status, state.result, selectedFiles, addUpload]);
 
   function handleReset() {
     setSelectedFiles([]);

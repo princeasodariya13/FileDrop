@@ -177,10 +177,21 @@ export function ReceiveFileSection() {
     }
   }, [now, foundFile]);
 
-  async function handleDownloadSingle(fileId: string) {
+  async function triggerDownload(fileId: string, fileName?: string) {
+    const { downloadUrl, fileName: serverName } = await getDownloadUrl(fileId);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = fileName || serverName || "download";
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  async function handleDownloadSingle(fileId: string, fileName?: string) {
     try {
-      const { downloadUrl } = await getDownloadUrl(fileId);
-      window.location.href = downloadUrl;
+      await triggerDownload(fileId, fileName);
       push("Starting file download...", "success");
     } catch (err: any) {
       push(err.message || "Failed to start download.", "error");
@@ -194,13 +205,7 @@ export function ReceiveFileSection() {
     try {
       for (let i = 0; i < fileList.length; i++) {
         const item = fileList[i];
-        const { downloadUrl } = await getDownloadUrl(item.fileId);
-        const a = document.createElement("a");
-        a.href = downloadUrl;
-        a.download = item.fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        await triggerDownload(item.fileId, item.fileName);
         if (i < fileList.length - 1) {
           await new Promise((r) => setTimeout(r, 600));
         }
