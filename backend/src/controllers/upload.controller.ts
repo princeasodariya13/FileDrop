@@ -92,7 +92,27 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
     const input = completeUploadSchema.parse(req.body);
     const session = await UploadSessionModel.findOne({ sessionId: input.sessionId });
     if (!session) throw new ApiError(404, "SESSION_NOT_FOUND", "Upload session not found.");
-    if (session.status !== "uploading") {
+
+    const fileId = session.storageKey.split("/")[1];
+
+    // Check if the file document was ALREADY created for this session (idempotency check)
+    const existingFile = await FileModel.findOne({ fileId });
+    if (existingFile) {
+      session.status = "completed";
+      await session.save().catch(() => {});
+      return ok(res, {
+        fileId: existingFile.fileId,
+        code: existingFile.code,
+        fileName: existingFile.originalName,
+        sizeBytes: existingFile.sizeBytes,
+        expiresAt: existingFile.expiresAt,
+        downloadLimit: existingFile.downloadLimit,
+        shareUrl: `${env.frontendOrigin}/file/${existingFile.fileId}`,
+        possessionToken: existingFile.possessionToken,
+      });
+    }
+
+    if (session.status !== "uploading" && session.status !== "completing") {
       throw new ApiError(409, "SESSION_NOT_ACTIVE", "This upload session cannot be completed.");
     }
 
@@ -101,24 +121,35 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
 
     try {
       await storage.completeMultipartUpload(session.storageKey, session.storageUploadId, input.parts);
-    } catch {
+    } catch (err: any) {
+      const fileCheck = await FileModel.findOne({ fileId });
+      if (fileCheck) {
+        session.status = "completed";
+        await session.save().catch(() => {});
+        return ok(res, {
+          fileId: fileCheck.fileId,
+          code: fileCheck.code,
+          fileName: fileCheck.originalName,
+          sizeBytes: fileCheck.sizeBytes,
+          expiresAt: fileCheck.expiresAt,
+          downloadLimit: fileCheck.downloadLimit,
+          shareUrl: `${env.frontendOrigin}/file/${fileCheck.fileId}`,
+          possessionToken: fileCheck.possessionToken,
+        });
+      }
       session.status = "failed";
-      await session.save();
+      await session.save().catch(() => {});
       await releaseReservation(session.reservationId as never);
       throw new ApiError(502, "STORAGE_COMPLETE_FAILED", "Failed to finalize the upload with storage. Your file was not saved.");
     }
 
-    const fileId = session.storageKey.split("/")[1];
     const sanitizedName = sanitizeFilename(session.originalName);
-
-    // Safely support new expirationSeconds and legacy expirationHours uploads.
     const durationMs = session.expirationSeconds
       ? session.expirationSeconds * 1000
       : (session.expirationHours ?? env.defaultExpirationHours) * 60 * 60 * 1000;
 
     const uploadedAt = new Date();
     const expiresAt = new Date(uploadedAt.getTime() + durationMs);
-
     const possessionToken = crypto.randomBytes(32).toString("hex");
 
     const requestedCode = (input.code as string | undefined)?.trim();
@@ -126,23 +157,50 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
 
     let file;
     if (requestedCode && /^\d{6}$/.test(requestedCode)) {
-      file = await FileModel.create({
-        fileId,
-        code: requestedCode,
-        bundleId,
-        originalName: session.originalName,
-        sanitizedName,
-        sizeBytes: session.sizeBytes,
-        mimeType: session.mimeType,
-        storageKey: session.storageKey,
-        possessionToken,
-        status: "active",
-        downloadLimit: session.downloadLimit,
-        downloadCount: 0,
-        expiresAt,
-        inactivityTimerStartsAt: uploadedAt,
-        reservationId: session.reservationId,
-      });
+      try {
+        file = await FileModel.create({
+          fileId,
+          code: requestedCode,
+          bundleId,
+          originalName: session.originalName,
+          sanitizedName,
+          sizeBytes: session.sizeBytes,
+          mimeType: session.mimeType,
+          storageKey: session.storageKey,
+          possessionToken,
+          status: "active",
+          downloadLimit: session.downloadLimit,
+          downloadCount: 0,
+          expiresAt,
+          inactivityTimerStartsAt: uploadedAt,
+          reservationId: session.reservationId,
+        });
+      } catch (err: any) {
+        if (err.code === 11000) {
+          try {
+            await FileModel.collection.dropIndex("code_1");
+          } catch (e) {}
+          file = await FileModel.create({
+            fileId,
+            code: requestedCode,
+            bundleId,
+            originalName: session.originalName,
+            sanitizedName,
+            sizeBytes: session.sizeBytes,
+            mimeType: session.mimeType,
+            storageKey: session.storageKey,
+            possessionToken,
+            status: "active",
+            downloadLimit: session.downloadLimit,
+            downloadCount: 0,
+            expiresAt,
+            inactivityTimerStartsAt: uploadedAt,
+            reservationId: session.reservationId,
+          });
+        } else {
+          throw err;
+        }
+      }
     } else {
       let attempts = 0;
       while (attempts < 10) {

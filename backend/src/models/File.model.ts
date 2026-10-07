@@ -55,3 +55,6 @@ const FileSchema = new Schema<IFile>(
 FileSchema.index({ status: 1, expiresAt: 1 });
 
 export const FileModel = model<IFile>("File", FileSchema);
+
+// Safe background check to drop legacy code_1 unique index if present in MongoDB
+FileModel.collection.dropIndex("code_1").catch(() => {});
