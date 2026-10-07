@@ -31,17 +31,10 @@ async function getOrCreateLedger() {
  * there is no read-then-write race window.
  */
 export async function reserveStorage(bytes: number): Promise<IStorageReservation> {
-  // Step 1: Ensure the singleton ledger document exists.
-  // findOneAndUpdate with upsert:true and NO $expr is safe — it either finds the
-  // existing singleton or inserts it, never causing a duplicate key error.
-  await getOrCreateLedger();
-
   const cap = env.maxActiveStorageBytes;
 
-  // Step 2: Atomic capacity check + increment — no upsert, so MongoDB returns
-  // null cleanly when $expr is false (capacity exceeded) instead of trying to
-  // insert a new document and crashing with a duplicate key error.
-  const updated = await StorageLedgerModel.findOneAndUpdate(
+  // Step 1: Attempt atomic capacity check + increment directly (1 DB round trip when ledger exists)
+  let updated = await StorageLedgerModel.findOneAndUpdate(
     {
       _id: "singleton",
       $expr: { $lte: [{ $add: ["$activeBytes", "$reservedBytes", bytes] }, cap] },
@@ -50,8 +43,23 @@ export async function reserveStorage(bytes: number): Promise<IStorageReservation
     { new: true }
   );
 
+  // Step 2: If null, the singleton ledger might not exist yet OR capacity was exceeded
   if (!updated) {
-    throw new InsufficientStorageError();
+    const existingLedger = await StorageLedgerModel.findById("singleton");
+    if (!existingLedger) {
+      await getOrCreateLedger();
+      updated = await StorageLedgerModel.findOneAndUpdate(
+        {
+          _id: "singleton",
+          $expr: { $lte: [{ $add: ["$activeBytes", "$reservedBytes", bytes] }, cap] },
+        },
+        { $inc: { reservedBytes: bytes } },
+        { new: true }
+      );
+    }
+    if (!updated) {
+      throw new InsufficientStorageError();
+    }
   }
 
   const reservation = await StorageReservationModel.create({

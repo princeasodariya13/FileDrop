@@ -343,7 +343,18 @@ export function useFileUpload() {
         setState({ ...initialState, status: "validating", totalBytes: file.size });
         setState((s) => ({ ...s, status: "reserving" }));
 
-        const session = await createUploadSession(file, options);
+        // Storage reservation check completes on backend in <100ms; transition to initializing if session setup is ongoing
+        const initTimer = setTimeout(() => {
+          setState((s) => (s.status === "reserving" ? { ...s, status: "initializing" } : s));
+        }, 600);
+
+        let session;
+        try {
+          session = await createUploadSession(file, options);
+        } finally {
+          clearTimeout(initTimer);
+        }
+
         sessionIdRef.current = session.sessionId;
         queueRef.current = session.parts;
         partSizeRef.current = session.partSizeBytes;
@@ -515,7 +526,17 @@ export function useFileUpload() {
           status: "reserving"
         }));
 
-        const refreshedUrls = await refreshPartUrls(sessionId);
+        const initTimer = setTimeout(() => {
+          setState((s) => (s.status === "reserving" ? { ...s, status: "initializing" } : s));
+        }, 600);
+
+        let refreshedUrls;
+        try {
+          refreshedUrls = await refreshPartUrls(sessionId);
+        } finally {
+          clearTimeout(initTimer);
+        }
+
         queueRef.current = refreshedUrls.parts;
 
         setState((s) => ({ ...s, status: "uploading" }));
