@@ -7,9 +7,10 @@ import { logger } from "@/utils/logger";
 
 /** Expire files whose expiresAt has passed: delete storage object, release storage, mark expired. */
 export async function expireOverdueFiles(): Promise<number> {
+  const now = new Date();
   const overdue = await FileModel.find({
     $or: [
-      { status: { $in: ["active", "exhausted"] }, expiresAt: { $lt: new Date() } },
+      { status: { $in: ["active", "exhausted"] }, expiresAt: { $lte: now } },
       { status: "deleted" }
     ]
   }).limit(200);
@@ -18,13 +19,14 @@ export async function expireOverdueFiles(): Promise<number> {
   const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
 
   for (const file of overdue) {
-    // 1. Fresh check for active download sessions (must protect active downloads even if file is deleted/exhausted)
+    // 1. Fresh check for active download sessions with unexpired leases
     const activeSessions = await DownloadSessionModel.countDocuments({
       fileId: file._id,
-      status: "active"
+      status: "active",
+      leaseUntil: { $gt: now }
     });
     if (activeSessions > 0) {
-      // Protect the file while download is active.
+      // Protect the file while download lease is active.
       continue;
     }
 
@@ -42,7 +44,7 @@ export async function expireOverdueFiles(): Promise<number> {
     }
     await file.save();
     count++;
-    logger.info({ fileId: file.fileId }, "File expired/deleted and cleaned up");
+    logger.info({ fileId: file.fileId }, "File expired/deleted and cleaned up permanently from B2");
   }
 
   return count;
@@ -117,7 +119,8 @@ export async function sweepStaleDownloadSessions(): Promise<number> {
     // Check if THIS was the absolute last active session for this file
     const otherActive = await DownloadSessionModel.countDocuments({
       fileId: session.fileId,
-      status: "active"
+      status: "active",
+      leaseUntil: { $gt: now }
     });
 
     if (otherActive === 0) {
@@ -133,6 +136,7 @@ export async function sweepStaleDownloadSessions(): Promise<number> {
 }
 
 export async function expireNoAccessFiles(): Promise<number> {
+  const now = new Date();
   const staleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
   const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
 
@@ -147,10 +151,11 @@ export async function expireNoAccessFiles(): Promise<number> {
 
   let count = 0;
   for (const file of overdue) {
-    // FRESH CHECK: Are there any newly started active download sessions?
+    // FRESH CHECK: Are there any active download sessions with unexpired leases?
     const activeSessions = await DownloadSessionModel.countDocuments({
       fileId: file._id,
-      status: "active"
+      status: "active",
+      leaseUntil: { $gt: now }
     });
     if (activeSessions > 0) {
       // Receiver started a download just in time. Skip deletion!
@@ -185,11 +190,11 @@ export async function expireNoAccessFiles(): Promise<number> {
 
 /** Runs the full cleanup pass. Safe to call repeatedly/concurrently — every step is idempotent. */
 export async function runCleanupPass(): Promise<void> {
-  const [expired, abandoned, reclaimed, staleDown, noAccess] = await Promise.all([
+  const staleDown = await sweepStaleDownloadSessions();
+  const [expired, abandoned, reclaimed, noAccess] = await Promise.all([
     expireOverdueFiles(),
     sweepAbandonedSessions(),
     reclaimExpiredReservations(),
-    sweepStaleDownloadSessions(),
     expireNoAccessFiles(),
   ]);
   logger.info({ expired, abandoned, reclaimed, staleDown, noAccess }, "Cleanup pass complete");

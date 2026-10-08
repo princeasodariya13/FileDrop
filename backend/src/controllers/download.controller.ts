@@ -209,6 +209,13 @@ export async function generateDownload(req: Request, res: Response, next: NextFu
       throw new ApiError(404, "FILE_NOT_FOUND", "This file is no longer available.");
     }
     if (existing.expiresAt < now) {
+      // Opportunistic purge of expired file from B2 storage
+      storage.deleteObject(existing.storageKey).then(async () => {
+        const { releaseActiveStorage } = await import("@/services/storageReservation.service");
+        await releaseActiveStorage(existing.sizeBytes);
+        existing.status = "expired";
+        await existing.save();
+      }).catch(() => {});
       throw new ApiError(410, "FILE_EXPIRED", "This file has expired.");
     }
 
@@ -261,11 +268,25 @@ export async function deleteFile(req: Request, res: Response, next: NextFunction
     );
     if (!file) throw new ApiError(404, "FILE_NOT_FOUND", "This file is no longer available.");
 
-    // We intentionally DO NOT delete the storage object or release storage quota here.
-    // This safely protects any receivers who are currently downloading the file.
-    // The background cleanup job will physically delete the object and release quota
-    // once all active DownloadSession leases reach zero.
+    // Check if there are active download leases
+    const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
+    const activeSessions = await DownloadSessionModel.countDocuments({
+      fileId: file._id,
+      status: "active",
+      leaseUntil: { $gt: new Date() }
+    });
 
+    if (activeSessions === 0) {
+      // Immediate permanent delete from B2 storage
+      storage.deleteObject(file.storageKey).then(async () => {
+        const { releaseActiveStorage } = await import("@/services/storageReservation.service");
+        await releaseActiveStorage(file.sizeBytes);
+        file.status = "expired";
+        await file.save();
+      }).catch((err) => {
+        logger.warn({ err, fileId: file.fileId }, "Immediate B2 delete failed, will be retried by cleanup job");
+      });
+    }
 
     return ok(res, { fileId: file.fileId, status: "deleted" });
   } catch (err) {

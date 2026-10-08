@@ -6,6 +6,8 @@ import {
   AbortMultipartUploadCommand,
   HeadObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectVersionsCommand,
   GetObjectCommand,
   ListPartsCommand,
   NotFound
@@ -192,11 +194,49 @@ export class B2StorageService implements IStorageService {
 
   async deleteObject(key: string): Promise<void> {
     try {
+      // 1. Purge all versions and delete markers if versioning is enabled in B2
+      try {
+        const versionsCmd = new ListObjectVersionsCommand({
+          Bucket: env.b2BucketName,
+          Prefix: key,
+        });
+        const versionsRes = await this.client.send(versionsCmd);
+        const toDelete: Array<{ Key: string; VersionId?: string }> = [];
+
+        if (versionsRes.Versions) {
+          for (const v of versionsRes.Versions) {
+            if (v.Key === key && v.VersionId) {
+              toDelete.push({ Key: key, VersionId: v.VersionId });
+            }
+          }
+        }
+
+        if (versionsRes.DeleteMarkers) {
+          for (const m of versionsRes.DeleteMarkers) {
+            if (m.Key === key && m.VersionId) {
+              toDelete.push({ Key: key, VersionId: m.VersionId });
+            }
+          }
+        }
+
+        if (toDelete.length > 0) {
+          const bulkDeleteCmd = new DeleteObjectsCommand({
+            Bucket: env.b2BucketName,
+            Delete: { Objects: toDelete },
+          });
+          await this.client.send(bulkDeleteCmd);
+        }
+      } catch (versionErr) {
+        // Fallback to standard delete if version listing is unneeded or unsupported
+      }
+
+      // 2. Standard DeleteObjectCommand ensuring single/unversioned objects are deleted
       const command = new DeleteObjectCommand({
         Bucket: env.b2BucketName,
         Key: key,
       });
       await this.client.send(command);
+      logger.info({ key }, "B2 storage object permanently deleted");
     } catch (err: any) {
       logger.error({ err, key }, "B2 deleteObject failed");
       throw new Error(`STORAGE_DELETE_FAILED: ${err.message}`);

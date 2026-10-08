@@ -15,6 +15,9 @@ async function main() {
   });
 
   const cleanupTask = scheduleCleanupJob();
+  import("@/jobs/cleanup.job").then(({ runCleanupPass }) => {
+    runCleanupPass().catch((err) => logger.error({ err }, "Initial startup cleanup pass failed"));
+  });
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {
