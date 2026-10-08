@@ -40,9 +40,32 @@ export function useMyUploads() {
   const removeUpload = useCallback((fileId: string) => {
     setUploads(prev => {
       const newUploads = prev.filter(u => u.fileId !== fileId);
-      localStorage.setItem("filedrop_my_uploads", JSON.stringify(newUploads));
+      try {
+        localStorage.setItem("filedrop_my_uploads", JSON.stringify(newUploads));
+      } catch {}
       return newUploads;
     });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("filedrop_file_deleted", { detail: { fileId } }));
+    }
+  }, []);
+
+  // Listen for deletions from other components / share screen
+  useEffect(() => {
+    const handleDeletedEvent = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.fileId) {
+        setUploads(prev => {
+          const filtered = prev.filter(u => u.fileId !== detail.fileId);
+          try {
+            localStorage.setItem("filedrop_my_uploads", JSON.stringify(filtered));
+          } catch {}
+          return filtered;
+        });
+      }
+    };
+    window.addEventListener("filedrop_file_deleted", handleDeletedEvent);
+    return () => window.removeEventListener("filedrop_file_deleted", handleDeletedEvent);
   }, []);
 
   // Cleanup effect: periodically remove expired entries
@@ -52,7 +75,9 @@ export function useMyUploads() {
         const now = Date.now();
         const valid = prev.filter(u => new Date(u.expiresAt).getTime() > now);
         if (valid.length !== prev.length) {
-          localStorage.setItem("filedrop_my_uploads", JSON.stringify(valid));
+          try {
+            localStorage.setItem("filedrop_my_uploads", JSON.stringify(valid));
+          } catch {}
           return valid;
         }
         return prev;

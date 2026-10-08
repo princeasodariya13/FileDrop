@@ -38,7 +38,7 @@ export interface CompleteUploadResponse {
   downloadLimit: number | null;
   shareUrl: string;
   possessionToken: string;
-  files?: Array<{ fileId: string; fileName: string; sizeBytes: number; shareUrl: string }>;
+  files?: Array<{ fileId: string; fileName: string; sizeBytes: number; shareUrl: string; possessionToken?: string }>;
 }
 
 export interface FileInfoResponse {

@@ -104,6 +104,7 @@ export function UploadFlow() {
               fileName: r.fileName,
               sizeBytes: r.sizeBytes,
               shareUrl: r.shareUrl,
+              possessionToken: r.possessionToken,
             })),
           };
           setBatchResult(batch);
@@ -125,6 +126,28 @@ export function UploadFlow() {
     setOptions(DEFAULT_OPTIONS);
     reset();
   }
+
+  const activeResult = batchResult || (state.status === "success" ? state.result : null);
+
+  // When active upload is deleted (either from ShareResult or MyUploadsList), immediately reset the interface
+  useEffect(() => {
+    const handleDeletedEvent = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const deletedId = detail?.fileId;
+      if (!deletedId) return;
+
+      if (
+        (activeResult && activeResult.fileId === deletedId) ||
+        (activeResult?.files && activeResult.files.some((f) => f.fileId === deletedId)) ||
+        (batchResult && batchResult.fileId === deletedId) ||
+        (batchResult?.files && batchResult.files.some((f) => f.fileId === deletedId))
+      ) {
+        handleReset();
+      }
+    };
+    window.addEventListener("filedrop_file_deleted", handleDeletedEvent);
+    return () => window.removeEventListener("filedrop_file_deleted", handleDeletedEvent);
+  }, [activeResult, batchResult]);
 
   async function handleResumeFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -160,13 +183,18 @@ export function UploadFlow() {
     }
   }
 
-  const activeResult = batchResult || (state.status === "success" ? state.result : null);
-
   if (activeResult) {
     return (
       <div className="space-y-4">
-        <ShareResult result={activeResult} onUploadAnother={handleReset} />
-        <MyUploadsList />
+        <ShareResult result={activeResult} onUploadAnother={handleReset} onDelete={handleReset} />
+        <MyUploadsList onFileDeleted={(deletedId) => {
+          if (
+            (activeResult && activeResult.fileId === deletedId) ||
+            (activeResult?.files && activeResult.files.some((f) => f.fileId === deletedId))
+          ) {
+            handleReset();
+          }
+        }} />
       </div>
     );
   }

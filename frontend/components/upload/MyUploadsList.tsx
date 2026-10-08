@@ -45,7 +45,19 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      await deleteFileEarly(upload.fileId, upload.possessionToken);
+      if (upload.possessionToken) {
+        await deleteFileEarly(upload.fileId, upload.possessionToken);
+      }
+      // If this was a batch with sibling files, delete them too
+      if (upload.files && upload.files.length > 0) {
+        for (const sibling of upload.files) {
+          if (sibling.fileId !== upload.fileId && sibling.possessionToken) {
+            try {
+              await deleteFileEarly(sibling.fileId, sibling.possessionToken);
+            } catch {}
+          }
+        }
+      }
       onRemove(upload.fileId);
       push("File permanently deleted", "success");
     } catch (err: any) {
@@ -113,10 +125,17 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
   );
 }
 
-export function MyUploadsList() {
+export function MyUploadsList({ onFileDeleted }: { onFileDeleted?: (fileId: string) => void } = {}) {
   const { uploads, removeUpload } = useMyUploads();
 
   if (uploads.length === 0) return null;
+
+  const handleRemove = (id: string) => {
+    removeUpload(id);
+    if (onFileDeleted) {
+      onFileDeleted(id);
+    }
+  };
 
   return (
     <div className="space-y-4 mt-8">
@@ -125,7 +144,7 @@ export function MyUploadsList() {
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {uploads.map(upload => (
-          <UploadItem key={upload.fileId} upload={upload} onRemove={removeUpload} />
+          <UploadItem key={upload.fileId} upload={upload} onRemove={handleRemove} />
         ))}
       </div>
     </div>

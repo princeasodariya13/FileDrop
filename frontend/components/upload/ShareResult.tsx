@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 interface Props {
   result: CompleteUploadResponse;
   onUploadAnother: () => void;
+  onDelete?: () => void;
 }
 
 function getFallbackCode(fileId: string): string {
@@ -21,9 +22,11 @@ function getFallbackCode(fileId: string): string {
   return (100000 + Math.abs(hash)).toString();
 }
 
-export function ShareResult({ result, onUploadAnother }: Props) {
+export function ShareResult({ result, onUploadAnother, onDelete }: Props) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { push } = useToast();
 
   const [now, setNow] = useState<number>(() => Date.now());
@@ -68,13 +71,58 @@ export function ShareResult({ result, onUploadAnother }: Props) {
     }
   }
 
+  async function handleDelete() {
+    setIsDeleting(true);
+    try {
+      const { deleteFileEarly } = await import("@/lib/api/files");
+      if (result.possessionToken) {
+        await deleteFileEarly(result.fileId, result.possessionToken);
+      }
+      if (result.files && result.files.length > 0) {
+        for (const sibling of result.files) {
+          if (sibling.fileId !== result.fileId && sibling.possessionToken) {
+            try {
+              await deleteFileEarly(sibling.fileId, sibling.possessionToken);
+            } catch {}
+          }
+        }
+      }
+      
+      // Clean up localStorage code mapping
+      try {
+        const existingMap = JSON.parse(localStorage.getItem("filedrop_code_map") || "{}");
+        if (existingMap[activeCode]) {
+          delete existingMap[activeCode];
+          localStorage.setItem("filedrop_code_map", JSON.stringify(existingMap));
+        }
+      } catch {}
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("filedrop_file_deleted", { detail: { fileId: result.fileId } }));
+      }
+
+      push("File permanently deleted", "success");
+      if (onDelete) {
+        onDelete();
+      } else {
+        onUploadAnother();
+      }
+    } catch (err: any) {
+      push(err?.message || "Failed to delete file", "error");
+      setIsDeleting(false);
+      setShowConfirmDelete(false);
+    }
+  }
+
+  const isExpired = formatRelativeExpiry(result.expiresAt, now) === "expired";
+
   return (
     <Card className="p-6 sm:p-8 relative overflow-hidden group border border-emerald-500/30 shadow-[0_0_50px_rgba(16,185,129,0.15)] animate-fade-in-scale">
       <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-brand-500/5 to-transparent pointer-events-none" />
       
       <div className="relative z-10 flex items-center justify-between">
-        <div className="flex items-center gap-3 text-emerald-400 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="animate-pulse">
+        <div className={`flex items-center gap-3 ${isExpired ? "text-red-400 bg-red-500/10 border-red-500/20" : "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"} px-4 py-2 rounded-full border`}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" className={isExpired ? "" : "animate-pulse"}>
             <path
               d="M20 6L9 17l-5-5"
               stroke="currentColor"
@@ -83,10 +131,12 @@ export function ShareResult({ result, onUploadAnother }: Props) {
               strokeLinejoin="round"
             />
           </svg>
-          <span className="text-xs sm:text-sm font-bold tracking-wide uppercase">File Ready to Share</span>
+          <span className="text-xs sm:text-sm font-bold tracking-wide uppercase">
+            {isExpired ? "File Expired" : "File Ready to Share"}
+          </span>
         </div>
-        <span className="text-xs text-ink-400 font-mono">
-          expires {formatRelativeExpiry(result.expiresAt, now)}
+        <span className={`text-xs font-mono ${isExpired ? "text-red-400" : "text-ink-400"}`}>
+          {isExpired ? "expired" : `expires ${formatRelativeExpiry(result.expiresAt, now)}`}
         </span>
       </div>
 
@@ -174,10 +224,38 @@ export function ShareResult({ result, onUploadAnother }: Props) {
         </div>
       </div>
 
+      {/* FOOTER ACTIONS */}
       <div className="relative z-10 mt-6 pt-6 border-t border-surface-hover">
-        <Button variant="ghost" size="sm" onClick={onUploadAnother} className="w-full text-ink-300 hover:text-ink-50">
-          Upload another file
-        </Button>
+        {showConfirmDelete ? (
+          <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl space-y-3 animate-fade-in-scale">
+            <p className="text-xs sm:text-sm text-red-200">
+              <strong className="text-red-400 block mb-1">Delete this upload permanently?</strong>
+              This will remove the file immediately and disable all share links.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setShowConfirmDelete(false)} disabled={isDeleting} className="hover:bg-surface-hover text-xs">
+                Cancel
+              </Button>
+              <Button size="sm" variant="ghost" onClick={handleDelete} disabled={isDeleting} className="bg-red-500/20 text-red-400 hover:bg-red-500/30 text-xs font-medium">
+                {isDeleting ? "Deleting..." : "Yes, Delete File"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowConfirmDelete(true)}
+              className="text-ink-400 hover:text-red-400 hover:bg-red-500/10 text-xs"
+            >
+              Delete File
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onUploadAnother} className="text-ink-300 hover:text-ink-50 text-xs sm:text-sm">
+              Upload another file
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );
