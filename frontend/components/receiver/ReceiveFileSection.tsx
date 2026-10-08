@@ -42,9 +42,19 @@ export function ReceiveFileSection() {
 
   const fullCode = digits.join("");
 
-  // Auto-restore previously retrieved unexpired file on mount
+  // Auto-restore previously retrieved unexpired file or handle ?code= query param on mount
   useEffect(() => {
     try {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const urlCode = params.get("code");
+        if (urlCode && /^\d{6}$/.test(urlCode)) {
+          setDigits(urlCode.split(""));
+          handleLookup(urlCode);
+          return;
+        }
+      }
+
       const saved = localStorage.getItem("filedrop_recent_received");
       if (saved) {
         const parsed = JSON.parse(saved);

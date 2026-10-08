@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { ScanButton } from "@/components/ui/ScanButton";
 import "./globals.css";
 
 const inter = Inter({
@@ -112,7 +113,10 @@ export default function RootLayout({
               <span className="font-heading font-semibold text-xl tracking-tight text-ink-50 group-hover:text-brand-500 transition-colors">FileDrop</span>
             </Link>
 
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              <ScanButton />
+              <ThemeToggle />
+            </div>
           </div>
         </header>
         <main className="flex-1 relative z-10">{children}</main>

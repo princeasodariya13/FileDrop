@@ -137,9 +137,9 @@ export function QRCodeModal({
         </div>
 
         {code && (
-          <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold text-brand-300 bg-brand-500/10 border border-brand-500/20 py-1.5 px-3 rounded-xl">
-            <span>6-Digit Code:</span>
-            <span className="text-white tracking-wider">{code}</span>
+          <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold text-slate-900 bg-slate-100 border border-slate-200/80 py-2 px-3.5 rounded-xl shadow-xs">
+            <span className="text-slate-800">6-Digit Code:</span>
+            <span className="text-black font-extrabold tracking-widest text-sm">{code}</span>
           </div>
         )}
 
