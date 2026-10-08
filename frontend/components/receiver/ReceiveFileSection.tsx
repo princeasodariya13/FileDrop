@@ -8,6 +8,7 @@ import { getFileInfoByCode, getFileInfo, getDownloadUrl } from "@/lib/api/files"
 import { FileInfoResponse } from "@/types/upload";
 import { formatBytes, formatRelativeExpiry } from "@/utils/format";
 import { useToast } from "@/components/ui/Toast";
+import { QRCodeModal } from "@/components/ui/QRCodeModal";
 
 export function ReceiveFileSection() {
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", ""]);
@@ -16,6 +17,12 @@ export function ReceiveFileSection() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inlineToast, setInlineToast] = useState<{ message: string; tone: "success" | "error" | "info" } | null>(null);
+  const [selectedQR, setSelectedQR] = useState<{
+    url: string;
+    title: string;
+    subtitle?: string;
+    code?: string;
+  } | null>(null);
   const { push } = useToast();
   const router = useRouter();
 
@@ -437,7 +444,7 @@ export function ReceiveFileSection() {
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-2.5">
             <Button
               className="flex-1 text-sm py-3"
               disabled={isDownloading}
@@ -448,10 +455,31 @@ export function ReceiveFileSection() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push(`/file/${foundFile.fileId}`)}
-              className="text-xs text-ink-300 hover:text-ink-50"
+              onClick={() =>
+                setSelectedQR({
+                  url: `https://file-drop-free.vercel.app/file/${foundFile.fileId}`,
+                  title: foundFile.files && foundFile.files.length > 1 ? `${foundFile.files.length} Files Batch` : foundFile.fileName,
+                  subtitle: formatBytes(foundFile.sizeBytes),
+                  code: foundFile.code || fullCode,
+                })
+              }
+              className="text-xs text-brand-300 hover:text-brand-200 hover:bg-brand-500/10 border border-surface-hover px-3"
             >
-              Open Page
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5 text-brand-400">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
+              QR
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/file/${foundFile.fileId}`)}
+              className="text-xs text-ink-300 hover:text-ink-50 px-3"
+            >
+              Page
             </Button>
           </div>
 
@@ -464,6 +492,17 @@ export function ReceiveFileSection() {
             </button>
           </div>
         </div>
+      )}
+
+      {selectedQR && (
+        <QRCodeModal
+          isOpen={Boolean(selectedQR)}
+          onClose={() => setSelectedQR(null)}
+          url={selectedQR.url}
+          title={selectedQR.title}
+          subtitle={selectedQR.subtitle}
+          code={selectedQR.code}
+        />
       )}
     </Card>
   );

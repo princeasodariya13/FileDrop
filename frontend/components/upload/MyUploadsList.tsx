@@ -7,8 +7,17 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { deleteFileEarly } from "@/lib/api/files";
 import { Card } from "@/components/ui/Card";
+import { QRCodeModal } from "@/components/ui/QRCodeModal";
 
-function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: string) => void }) {
+function UploadItem({
+  upload,
+  onRemove,
+  onShowQR,
+}: {
+  upload: MyUpload;
+  onRemove: (id: string) => void;
+  onShowQR: (data: { url: string; title: string; subtitle?: string; code?: string }) => void;
+}) {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [isDeleting, setIsDeleting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -104,15 +113,30 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between mt-2 pt-4 border-t border-surface">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between mt-2 pt-4 border-t border-surface flex-wrap gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {upload.code && (
                 <Button size="sm" variant="ghost" onClick={handleCopyCode} className="text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 text-xs px-2.5">
-                  Copy Code
+                  Code
                 </Button>
               )}
               <Button size="sm" variant="ghost" onClick={handleCopyLink} className="text-ink-300 hover:text-ink-50 hover:bg-surface-hover text-xs px-2.5">
-                Copy Link
+                Link
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  onShowQR({
+                    url: upload.shareUrl,
+                    title: upload.fileName,
+                    subtitle: formatBytes(upload.sizeBytes),
+                    code: upload.code,
+                  })
+                }
+                className="text-brand-300 hover:text-brand-200 hover:bg-brand-500/10 text-xs px-2.5"
+              >
+                QR
               </Button>
             </div>
             <Button size="sm" variant="ghost" onClick={() => setShowConfirm(true)} className="text-ink-400 hover:text-red-400 hover:bg-red-500/10 text-xs px-2.5">
@@ -127,6 +151,12 @@ function UploadItem({ upload, onRemove }: { upload: MyUpload, onRemove: (id: str
 
 export function MyUploadsList({ onFileDeleted }: { onFileDeleted?: (fileId: string) => void } = {}) {
   const { uploads, removeUpload } = useMyUploads();
+  const [selectedQR, setSelectedQR] = useState<{
+    url: string;
+    title: string;
+    subtitle?: string;
+    code?: string;
+  } | null>(null);
 
   if (uploads.length === 0) return null;
 
@@ -138,15 +168,33 @@ export function MyUploadsList({ onFileDeleted }: { onFileDeleted?: (fileId: stri
   };
 
   return (
-    <div className="space-y-4 mt-8">
-      <h3 className="text-sm font-semibold text-ink-300 uppercase tracking-wider px-2">
-        My Uploaded Files
-      </h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {uploads.map(upload => (
-          <UploadItem key={upload.fileId} upload={upload} onRemove={handleRemove} />
-        ))}
+    <>
+      <div className="space-y-4 mt-8">
+        <h3 className="text-sm font-semibold text-ink-300 uppercase tracking-wider px-2">
+          My Uploaded Files
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {uploads.map((upload) => (
+            <UploadItem
+              key={upload.fileId}
+              upload={upload}
+              onRemove={handleRemove}
+              onShowQR={setSelectedQR}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+
+      {selectedQR && (
+        <QRCodeModal
+          isOpen={Boolean(selectedQR)}
+          onClose={() => setSelectedQR(null)}
+          url={selectedQR.url}
+          title={selectedQR.title}
+          subtitle={selectedQR.subtitle}
+          code={selectedQR.code}
+        />
+      )}
+    </>
   );
 }
