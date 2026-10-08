@@ -306,12 +306,30 @@ export function useFileUpload() {
         .map(([partNumber, etag]) => ({ partNumber, etag }))
         .sort((a, b) => a.partNumber - b.partNumber);
 
-      const result = await completeUpload(
-        sessionIdRef.current,
-        partsToComplete,
-        batchCodeRef.current,
-        bundleIdRef.current
-      );
+      let result: CompleteUploadResponse | null = null;
+      let lastErr: any = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          result = await completeUpload(
+            sessionIdRef.current,
+            partsToComplete,
+            batchCodeRef.current,
+            bundleIdRef.current
+          );
+          break;
+        } catch (err: any) {
+          lastErr = err;
+          if (attempt < 3 && !cancelSignal?.aborted) {
+            await new Promise((r) => setTimeout(r, attempt * 800));
+          }
+        }
+      }
+
+      if (!result) {
+        throw lastErr || new Error("Upload completion failed. Please try again.");
+      }
+
+      clearActiveUpload();
       setState((s) => ({ ...s, status: "success", result }));
       return result;
     } catch (err: any) {

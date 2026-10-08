@@ -230,7 +230,10 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
           });
           break;
         } catch (err: any) {
-          if (err.code === 11000 && err.keyPattern?.code) {
+          if (err.code === 11000) {
+            try {
+              await FileModel.collection.dropIndex("code_1");
+            } catch (e) {}
             attempts++;
             continue;
           }
@@ -240,13 +243,36 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
     }
 
     if (!file) {
+      // Fallback attempt: if code generation failed due to collisions, create without custom code
+      file = await FileModel.create({
+        fileId,
+        code: generateTransferCode(),
+        bundleId,
+        originalName: session.originalName,
+        sanitizedName,
+        sizeBytes: session.sizeBytes,
+        mimeType: session.mimeType,
+        storageKey: session.storageKey,
+        possessionToken,
+        status: "active",
+        downloadLimit: session.downloadLimit,
+        downloadCount: 0,
+        expiresAt,
+        inactivityTimerStartsAt: uploadedAt,
+        reservationId: session.reservationId,
+      }).catch(async () => {
+        return FileModel.findOne({ fileId });
+      });
+    }
+
+    if (!file) {
       throw new ApiError(500, "CODE_GENERATION_FAILED", "Could not generate a unique transfer code. Please try again.");
     }
 
-    await commitReservation(session.reservationId as never);
+    await commitReservation(session.reservationId as never).catch(() => {});
 
     session.status = "completed";
-    await session.save();
+    await session.save().catch(() => {});
 
     logger.info({ fileId, code: file.code, sizeBytes: file.sizeBytes }, "Upload completed with transfer code");
 

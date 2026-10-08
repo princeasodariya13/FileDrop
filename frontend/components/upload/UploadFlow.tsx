@@ -114,7 +114,7 @@ export function UploadFlow() {
         }
       }
     } catch (err: any) {
-      push(state.errorMessage ?? "Upload failed for one or more files.", "error");
+      push(err?.message || state.errorMessage || "Upload failed for one or more files.", "error");
     }
   }
 
