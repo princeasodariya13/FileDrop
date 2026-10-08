@@ -53,23 +53,48 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
     }, 60000);
   }
 
-  async function handleDownloadSingle(fileId: string) {
+  async function handleDownloadSingle(fileId: string, customFileName?: string) {
+    if (new Date(file.expiresAt).getTime() <= Date.now()) {
+      push("This file has expired and is no longer available.", "error");
+      setError("This file has expired and cannot be downloaded.");
+      return;
+    }
+
     setIsDownloading(true);
     setError(null);
     try {
-      const { downloadUrl, sessionId } = await getDownloadUrl(fileId);
+      const { downloadUrl, sessionId, fileName: fetchedName } = await getDownloadUrl(fileId);
       downloadViaIframe(downloadUrl, sessionId);
-      push("Starting file download...", "success");
-    } catch (err) {
+      const displayName = customFileName || fetchedName || file.fileName || "File";
+      push(`"${displayName}" downloaded successfully!`, "success");
+    } catch (err: any) {
       const message =
-        err instanceof ApiRequestError ? err.message : "Couldn't start the download. Please try again.";
-      setError(message);
+        err instanceof ApiRequestError
+          ? err.message
+          : err?.message || "Couldn't start the download. Please try again.";
+      if (
+        message.toLowerCase().includes("expire") ||
+        message.toLowerCase().includes("no longer available") ||
+        message.toLowerCase().includes("not found")
+      ) {
+        push("This file has expired and is no longer available.", "error");
+        setError("This file has expired and cannot be downloaded.");
+      } else {
+        push(message, "error");
+        setError(message);
+      }
     } finally {
       setIsDownloading(false);
     }
   }
 
   async function handleDownloadAll() {
+    if (new Date(file.expiresAt).getTime() <= Date.now()) {
+      push("The files have expired and are no longer available.", "error");
+      setError("These files have expired and cannot be downloaded.");
+      return;
+    }
+
     const fileList = file.files && file.files.length > 0 ? file.files : [file];
     setIsDownloading(true);
     setError(null);
@@ -86,16 +111,34 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
           await new Promise((r) => setTimeout(r, 800));
         }
       }
-      push(`Downloading all ${fileList.length} files...`, "success");
-    } catch (err) {
+      push(
+        fileList.length > 1
+          ? `All ${fileList.length} files downloaded successfully!`
+          : "File downloaded successfully!",
+        "success"
+      );
+    } catch (err: any) {
       const message =
-        err instanceof ApiRequestError ? err.message : "Couldn't start downloads. Please try again.";
-      setError(message);
+        err instanceof ApiRequestError
+          ? err.message
+          : err?.message || "Couldn't start downloads. Please try again.";
+      if (
+        message.toLowerCase().includes("expire") ||
+        message.toLowerCase().includes("no longer available") ||
+        message.toLowerCase().includes("not found")
+      ) {
+        push("The files have expired and are no longer available.", "error");
+        setError("These files have expired and cannot be downloaded.");
+      } else {
+        push(message, "error");
+        setError(message);
+      }
     } finally {
       setIsDownloading(false);
     }
   }
 
+  const isExpired = expiryText === "expired";
   const isMulti = Boolean(file.files && file.files.length > 1);
 
   return (
@@ -117,7 +160,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
           </p>
           <p className="mt-2 text-sm text-ink-400 font-mono">
             {isMulti ? formatBytes(file.files!.reduce((a, b) => a + b.sizeBytes, 0)) : formatBytes(file.sizeBytes)}{" "}
-            <span className="text-ink-600 mx-1">•</span> expires {expiryText}
+            <span className="text-ink-600 mx-1">•</span> <span className={isExpired ? "text-red-400 font-semibold" : ""}>expires {expiryText}</span>
             {file.downloadLimit
               ? <><span className="text-ink-600 mx-1">•</span> {Math.max(0, file.downloadLimit - file.downloadCount)} left</>
               : ""}
@@ -138,7 +181,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => handleDownloadSingle(item.fileId)}
+                  onClick={() => handleDownloadSingle(item.fileId, item.fileName)}
                   disabled={isDownloading}
                   className="text-xs px-3 py-1.5 text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 shrink-0"
                 >

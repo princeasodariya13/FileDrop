@@ -189,18 +189,42 @@ export function ReceiveFileSection() {
     }, 60000);
   }
 
-  async function handleDownloadSingle(fileId: string) {
+  async function handleDownloadSingle(fileId: string, fileName?: string) {
+    if (foundFile && new Date(foundFile.expiresAt).getTime() <= Date.now()) {
+      push("This file has expired and is no longer available.", "error");
+      setError("This file has expired and cannot be downloaded.");
+      return;
+    }
+
     try {
-      const { downloadUrl } = await getDownloadUrl(fileId);
+      const { downloadUrl, fileName: fetchedName } = await getDownloadUrl(fileId);
       downloadViaIframe(downloadUrl);
-      push("Starting file download...", "success");
+      const targetName = fileName || fetchedName || "File";
+      push(`"${targetName}" downloaded successfully!`, "success");
     } catch (err: any) {
-      push(err.message || "Failed to start download.", "error");
+      const errMsg = err?.message || "";
+      if (
+        errMsg.toLowerCase().includes("expire") ||
+        errMsg.toLowerCase().includes("no longer available") ||
+        errMsg.toLowerCase().includes("not found")
+      ) {
+        push("This file has expired and is no longer available.", "error");
+        setError("This file has expired and cannot be downloaded.");
+      } else {
+        push(errMsg || "Failed to download file.", "error");
+      }
     }
   }
 
   async function handleDownloadAll() {
     if (!foundFile) return;
+
+    if (new Date(foundFile.expiresAt).getTime() <= Date.now()) {
+      push("The files have expired and are no longer available.", "error");
+      setError("These files have expired and cannot be downloaded.");
+      return;
+    }
+
     const fileList = foundFile.files && foundFile.files.length > 0 ? foundFile.files : [foundFile];
     setIsDownloading(true);
     try {
@@ -216,13 +240,30 @@ export function ReceiveFileSection() {
           await new Promise((r) => setTimeout(r, 800));
         }
       }
-      push(`Downloading all ${fileList.length} files...`, "success");
+      push(
+        fileList.length > 1
+          ? `All ${fileList.length} files downloaded successfully!`
+          : "File downloaded successfully!",
+        "success"
+      );
     } catch (err: any) {
-      push(err.message || "Failed to start downloads.", "error");
+      const errMsg = err?.message || "";
+      if (
+        errMsg.toLowerCase().includes("expire") ||
+        errMsg.toLowerCase().includes("no longer available") ||
+        errMsg.toLowerCase().includes("not found")
+      ) {
+        push("The files have expired and are no longer available.", "error");
+        setError("These files have expired and cannot be downloaded.");
+      } else {
+        push(errMsg || "Failed to start downloads.", "error");
+      }
     } finally {
       setIsDownloading(false);
     }
   }
+
+  const isExpired = foundFile ? formatRelativeExpiry(foundFile.expiresAt, now) === "expired" : false;
 
   return (
     <Card className="p-6 sm:p-8 relative overflow-hidden group border border-brand-500/20 shadow-[0_4px_30px_rgba(0,0,0,0.5)] animate-fade-in-scale">
@@ -270,7 +311,7 @@ export function ReceiveFileSection() {
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
-                <span>Incorrect Code</span>
+                <span>Notice</span>
               </div>
               <p role="alert" className="text-xs sm:text-sm font-medium text-red-200">
                 {error}
@@ -291,13 +332,13 @@ export function ReceiveFileSection() {
       ) : (
         /* FOUND FILE PREVIEW & DOWNLOAD CARD */
         <div className="relative z-10 space-y-6 max-w-md mx-auto animate-fade-in-scale">
-          <div className="bg-surface border border-emerald-500/30 rounded-2xl p-5 relative overflow-hidden space-y-4">
+          <div className={`bg-surface border ${isExpired ? "border-red-500/30" : "border-emerald-500/30"} rounded-2xl p-5 relative overflow-hidden space-y-4`}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                Code Verified
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${isExpired ? "bg-red-500/10 border border-red-500/30 text-red-400" : "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"}`}>
+                {isExpired ? "File Expired" : "Code Verified"}
               </span>
-              <span className="text-xs text-ink-400 font-mono">
-                expires {formatRelativeExpiry(foundFile.expiresAt, now)}
+              <span className={`text-xs font-mono ${isExpired ? "text-red-400 font-semibold" : "text-ink-400"}`}>
+                {isExpired ? "expired" : `expires ${formatRelativeExpiry(foundFile.expiresAt, now)}`}
               </span>
             </div>
 
@@ -316,7 +357,8 @@ export function ReceiveFileSection() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleDownloadSingle(file.fileId)}
+                        onClick={() => handleDownloadSingle(file.fileId, file.fileName)}
+                        disabled={isDownloading}
                         className="text-xs px-2.5 py-1 text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 shrink-0"
                       >
                         Download
