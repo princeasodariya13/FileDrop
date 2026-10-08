@@ -12,8 +12,14 @@ import { ToastProvider, useToast } from "@/components/ui/Toast";
 function DownloadCard({ file }: { file: FileInfoResponse }) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inlineToast, setInlineToast] = useState<{ message: string; tone: "success" | "error" | "info" } | null>(null);
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const { push } = useToast();
+
+  const showNotification = (message: string, tone: "success" | "error" | "info" = "info") => {
+    push(message, tone);
+    setInlineToast({ message, tone });
+  };
   
   const [currentTime, setCurrentTime] = useState(() => Date.now());
 
@@ -55,7 +61,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
 
   async function handleDownloadSingle(fileId: string, customFileName?: string) {
     if (new Date(file.expiresAt).getTime() <= Date.now()) {
-      push("This file has expired and is no longer available.", "error");
+      showNotification("This file has expired and is no longer available.", "error");
       setError("This file has expired and cannot be downloaded.");
       return;
     }
@@ -66,7 +72,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
       const { downloadUrl, sessionId, fileName: fetchedName } = await getDownloadUrl(fileId);
       downloadViaIframe(downloadUrl, sessionId);
       const displayName = customFileName || fetchedName || file.fileName || "File";
-      push(`"${displayName}" downloaded successfully!`, "success");
+      showNotification(`"${displayName}" downloaded successfully!`, "success");
     } catch (err: any) {
       const message =
         err instanceof ApiRequestError
@@ -77,10 +83,10 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
         message.toLowerCase().includes("no longer available") ||
         message.toLowerCase().includes("not found")
       ) {
-        push("This file has expired and is no longer available.", "error");
+        showNotification("This file has expired and is no longer available.", "error");
         setError("This file has expired and cannot be downloaded.");
       } else {
-        push(message, "error");
+        showNotification(message, "error");
         setError(message);
       }
     } finally {
@@ -90,7 +96,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
 
   async function handleDownloadAll() {
     if (new Date(file.expiresAt).getTime() <= Date.now()) {
-      push("The files have expired and are no longer available.", "error");
+      showNotification("The files have expired and are no longer available.", "error");
       setError("These files have expired and cannot be downloaded.");
       return;
     }
@@ -111,7 +117,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
           await new Promise((r) => setTimeout(r, 800));
         }
       }
-      push(
+      showNotification(
         fileList.length > 1
           ? `All ${fileList.length} files downloaded successfully!`
           : "File downloaded successfully!",
@@ -127,10 +133,10 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
         message.toLowerCase().includes("no longer available") ||
         message.toLowerCase().includes("not found")
       ) {
-        push("The files have expired and are no longer available.", "error");
+        showNotification("The files have expired and are no longer available.", "error");
         setError("These files have expired and cannot be downloaded.");
       } else {
-        push(message, "error");
+        showNotification(message, "error");
         setError(message);
       }
     } finally {
@@ -145,6 +151,45 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
     <Card className="p-6 relative overflow-hidden animate-fade-in-scale border border-surface-hover group shadow-[0_0_40px_rgba(0,0,0,0.5)]">
       <div className="absolute inset-0 bg-gradient-to-br from-brand-500/10 to-transparent pointer-events-none" />
       
+      {inlineToast && (
+        <div
+          role="alert"
+          className={`relative z-10 p-3.5 mb-5 rounded-xl border flex items-center gap-2.5 text-xs sm:text-sm font-medium animate-fade-in-scale ${
+            inlineToast.tone === "success"
+              ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+              : inlineToast.tone === "error"
+              ? "bg-red-500/15 border-red-500/30 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.2)]"
+              : "bg-brand-500/15 border-brand-500/30 text-brand-300"
+          }`}
+        >
+          {inlineToast.tone === "success" ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-emerald-400">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          ) : inlineToast.tone === "error" ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-red-400">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brand-400">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          )}
+          <span className="flex-1">{inlineToast.message}</span>
+          <button
+            type="button"
+            onClick={() => setInlineToast(null)}
+            className="text-ink-400 hover:text-ink-100 text-xs px-1.5 py-0.5 rounded transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="relative z-10 flex flex-col items-center text-center space-y-4">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface border border-surface-hover text-brand-400 group-hover:scale-110 group-hover:text-brand-300 transition-transform duration-500">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">

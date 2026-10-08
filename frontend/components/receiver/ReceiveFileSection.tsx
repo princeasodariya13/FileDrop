@@ -15,8 +15,14 @@ export function ReceiveFileSection() {
   const [foundFile, setFoundFile] = useState<FileInfoResponse | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inlineToast, setInlineToast] = useState<{ message: string; tone: "success" | "error" | "info" } | null>(null);
   const { push } = useToast();
   const router = useRouter();
+
+  const showNotification = (message: string, tone: "success" | "error" | "info" = "info") => {
+    push(message, tone);
+    setInlineToast({ message, tone });
+  };
 
   const inputRefs = [
     useRef<HTMLInputElement>(null),
@@ -95,9 +101,11 @@ export function ReceiveFileSection() {
           JSON.stringify({ ...file, code: codeToLookup })
         );
       } catch (e) {}
-      push("File found successfully!", "success");
+      showNotification("File found successfully!", "success");
     } catch (err: any) {
-      setError(err.message || "Invalid code or file has expired.");
+      const errMsg = err.message || "Invalid code or file has expired.";
+      setError(errMsg);
+      showNotification(errMsg, "error");
     } finally {
       setIsSearching(false);
     }
@@ -153,6 +161,7 @@ export function ReceiveFileSection() {
     setDigits(["", "", "", "", "", ""]);
     setFoundFile(null);
     setError(null);
+    setInlineToast(null);
     try {
       localStorage.removeItem("filedrop_recent_received");
     } catch (e) {}
@@ -191,7 +200,7 @@ export function ReceiveFileSection() {
 
   async function handleDownloadSingle(fileId: string, fileName?: string) {
     if (foundFile && new Date(foundFile.expiresAt).getTime() <= Date.now()) {
-      push("This file has expired and is no longer available.", "error");
+      showNotification("This file has expired and is no longer available.", "error");
       setError("This file has expired and cannot be downloaded.");
       return;
     }
@@ -200,7 +209,7 @@ export function ReceiveFileSection() {
       const { downloadUrl, fileName: fetchedName } = await getDownloadUrl(fileId);
       downloadViaIframe(downloadUrl);
       const targetName = fileName || fetchedName || "File";
-      push(`"${targetName}" downloaded successfully!`, "success");
+      showNotification(`"${targetName}" downloaded successfully!`, "success");
     } catch (err: any) {
       const errMsg = err?.message || "";
       if (
@@ -208,10 +217,10 @@ export function ReceiveFileSection() {
         errMsg.toLowerCase().includes("no longer available") ||
         errMsg.toLowerCase().includes("not found")
       ) {
-        push("This file has expired and is no longer available.", "error");
+        showNotification("This file has expired and is no longer available.", "error");
         setError("This file has expired and cannot be downloaded.");
       } else {
-        push(errMsg || "Failed to download file.", "error");
+        showNotification(errMsg || "Failed to download file.", "error");
       }
     }
   }
@@ -220,7 +229,7 @@ export function ReceiveFileSection() {
     if (!foundFile) return;
 
     if (new Date(foundFile.expiresAt).getTime() <= Date.now()) {
-      push("The files have expired and are no longer available.", "error");
+      showNotification("The files have expired and are no longer available.", "error");
       setError("These files have expired and cannot be downloaded.");
       return;
     }
@@ -240,7 +249,7 @@ export function ReceiveFileSection() {
           await new Promise((r) => setTimeout(r, 800));
         }
       }
-      push(
+      showNotification(
         fileList.length > 1
           ? `All ${fileList.length} files downloaded successfully!`
           : "File downloaded successfully!",
@@ -253,10 +262,10 @@ export function ReceiveFileSection() {
         errMsg.toLowerCase().includes("no longer available") ||
         errMsg.toLowerCase().includes("not found")
       ) {
-        push("The files have expired and are no longer available.", "error");
+        showNotification("The files have expired and are no longer available.", "error");
         setError("These files have expired and cannot be downloaded.");
       } else {
-        push(errMsg || "Failed to start downloads.", "error");
+        showNotification(errMsg || "Failed to start downloads.", "error");
       }
     } finally {
       setIsDownloading(false);
@@ -277,6 +286,45 @@ export function ReceiveFileSection() {
           Enter the 6-digit code from your file transfer link to receive files without signup.
         </p>
       </div>
+
+      {inlineToast && (
+        <div
+          role="alert"
+          className={`relative z-10 p-3.5 mb-5 rounded-xl border flex items-center gap-2.5 text-xs sm:text-sm font-medium animate-fade-in-scale ${
+            inlineToast.tone === "success"
+              ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+              : inlineToast.tone === "error"
+              ? "bg-red-500/15 border-red-500/30 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.2)]"
+              : "bg-brand-500/15 border-brand-500/30 text-brand-300"
+          }`}
+        >
+          {inlineToast.tone === "success" ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-emerald-400">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          ) : inlineToast.tone === "error" ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-red-400">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brand-400">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          )}
+          <span className="flex-1">{inlineToast.message}</span>
+          <button
+            type="button"
+            onClick={() => setInlineToast(null)}
+            className="text-ink-400 hover:text-ink-100 text-xs px-1.5 py-0.5 rounded transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {!foundFile ? (
         <div className="relative z-10 space-y-6 max-w-sm mx-auto">
