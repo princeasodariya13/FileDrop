@@ -64,18 +64,6 @@ export function QRCodeModal({
 
   if (!isOpen) return null;
 
-  const handleDownload = () => {
-    if (!qrDataUrl) return;
-    const a = document.createElement("a");
-    a.href = qrDataUrl;
-    const sanitizedTitle = title.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40);
-    a.download = `filedrop-qr-${sanitizedTitle}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    push("QR Code downloaded successfully!", "success");
-  };
-
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(url);
@@ -87,7 +75,7 @@ export function QRCodeModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-white/30 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -97,7 +85,7 @@ export function QRCodeModal({
     >
       <div
         ref={modalRef}
-        className="relative w-full max-w-sm rounded-3xl bg-bg-panel border border-brand-500/30 p-6 sm:p-7 shadow-[0_0_50px_rgba(99,102,241,0.25)] animate-fade-in-scale space-y-5 text-center"
+        className="relative w-full max-w-sm rounded-3xl bg-bg-panel border border-brand-500/30 p-6 sm:p-7 shadow-[0_10px_40px_rgba(0,0,0,0.15)] animate-fade-in-scale space-y-5 text-center"
       >
         {/* Close Button */}
         <button
@@ -128,7 +116,7 @@ export function QRCodeModal({
         </div>
 
         {/* QR Code Canvas / Image Container */}
-        <div className="relative mx-auto flex items-center justify-center p-4 bg-white rounded-2xl shadow-inner border-2 border-brand-500/20 aspect-square max-w-[240px]">
+        <div className="relative mx-auto flex items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-brand-500/20 aspect-square max-w-[240px]">
           {isGenerating ? (
             <div className="flex flex-col items-center gap-2 text-ink-600 animate-pulse">
               <svg className="animate-spin h-6 w-6 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -160,26 +148,11 @@ export function QRCodeModal({
         </p>
 
         {/* Actions */}
-        <div className="grid grid-cols-2 gap-2.5 pt-1">
+        <div className="pt-1">
           <Button
             size="sm"
-            onClick={handleDownload}
-            disabled={!qrDataUrl}
-            className="text-xs py-2.5 bg-brand-500 hover:bg-brand-600 text-white shadow-md shadow-brand-500/25"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5 shrink-0">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Save QR
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
             onClick={handleCopyLink}
-            className="text-xs py-2.5 text-ink-200 hover:text-ink-50 hover:bg-surface-hover"
+            className="w-full text-xs py-2.5 bg-btn-primary text-white font-medium"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5 shrink-0">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -192,3 +165,4 @@ export function QRCodeModal({
     </div>
   );
 }
+
