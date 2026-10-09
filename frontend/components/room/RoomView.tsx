@@ -15,7 +15,9 @@ interface RoomViewProps {
   isConnected: boolean;
   isUploading: boolean;
   uploadProgress: number;
+  uploadingFileName?: string | null;
   onUploadFile: (file: File) => Promise<void>;
+  onUploadFiles?: (files: File[]) => Promise<void>;
   onDownloadFile: (fileId: string, fileName: string) => Promise<void>;
   onLeaveRoom: () => void;
 }
@@ -26,7 +28,9 @@ export function RoomView({
   isConnected,
   isUploading,
   uploadProgress,
+  uploadingFileName,
   onUploadFile,
+  onUploadFiles,
   onDownloadFile,
   onLeaveRoom,
 }: RoomViewProps) {
@@ -34,6 +38,7 @@ export function RoomView({
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
+  const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
 
   const [siteUrl, setSiteUrl] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +51,6 @@ export function RoomView({
   }, []);
 
   const roomInviteUrl = `${siteUrl || process.env.NEXT_PUBLIC_SITE_URL || ""}/room/${room.roomCode}`;
-
 
   const copyCode = async () => {
     try {
@@ -70,10 +74,30 @@ export function RoomView({
     }
   };
 
-  const handleFiles = (files: FileList | null) => {
+  const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    for (let i = 0; i < files.length; i++) {
-      onUploadFile(files[i]);
+    const fileArray = Array.from(files);
+    
+    // Clear input so selecting the same file again triggers change event
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
+    if (onUploadFiles) {
+      await onUploadFiles(fileArray);
+    } else {
+      for (const file of fileArray) {
+        await onUploadFile(file);
+      }
+    }
+  };
+
+  const handleDownload = async (fileId: string, fileName: string) => {
+    try {
+      setDownloadingFileId(fileId);
+      await onDownloadFile(fileId, fileName);
+    } finally {
+      setDownloadingFileId(null);
     }
   };
 
@@ -165,17 +189,20 @@ export function RoomView({
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`rounded-card p-6 sm:p-8 border-2 border-dashed text-center cursor-pointer transition-all ${
-          isDragOver
-            ? "border-brand-400 bg-brand-500/10 scale-[1.01]"
-            : "border-surface-hover hover:border-brand-500/50 bg-surface/40 hover:bg-surface/60"
+        onClick={() => !isUploading && fileInputRef.current?.click()}
+        className={`rounded-card p-6 sm:p-8 border-2 border-dashed text-center transition-all ${
+          isUploading
+            ? "border-surface-hover bg-surface/30 opacity-70 cursor-not-allowed"
+            : isDragOver
+            ? "border-brand-400 bg-brand-500/10 scale-[1.01] cursor-pointer"
+            : "border-surface-hover hover:border-brand-500/50 bg-surface/40 hover:bg-surface/60 cursor-pointer"
         }`}
       >
         <input
           ref={fileInputRef}
           type="file"
           multiple
+          disabled={isUploading}
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
@@ -189,20 +216,22 @@ export function RoomView({
           </div>
           <div className="space-y-1">
             <p className="text-sm font-semibold text-ink-50">
-              Drop files here to share with connected devices
+              {isUploading ? "Uploading file..." : "Drop files here to share with connected devices"}
             </p>
             <p className="text-xs text-ink-400">
-              or click to browse files from your device
+              {isUploading ? "Please wait for the current upload to finish" : "or click to browse files from your device"}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Uploading Status Progress */}
+      {/* Uploading Status Progress Bar */}
       {isUploading && (
         <div className="rounded-card p-4 bg-brand-500/10 border border-brand-500/30 space-y-2 animate-fade-in">
           <div className="flex items-center justify-between text-xs font-semibold text-brand-300">
-            <span>Uploading to shared room...</span>
+            <span className="truncate max-w-[70%]">
+              {uploadingFileName ? `Uploading ${uploadingFileName}...` : "Uploading to shared room..."}
+            </span>
             <span className="font-mono">{uploadProgress}%</span>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-surface">
@@ -215,7 +244,7 @@ export function RoomView({
       )}
 
       {/* Shared Files Feed */}
-      <div className="rounded-card p-6 border border-surface space-y-4">
+      <div className="rounded-card p-6 border border-surface bg-surface/50 backdrop-blur-xl shadow-xl space-y-4">
         <div className="flex items-center justify-between border-b border-surface pb-3">
           <h3 className="text-sm font-bold font-heading text-ink-50">
             Shared Room Files ({room.files.length})
@@ -234,36 +263,41 @@ export function RoomView({
           </div>
         ) : (
           <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-            {room.files.map((file) => (
-              <div
-                key={file.fileId}
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-surface/70 border border-surface-hover hover:border-brand-500/30 transition-all"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500/20 text-brand-400">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M13 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V9L13 2Z" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-semibold text-ink-50">
-                      {file.fileName}
-                    </p>
-                    <p className="text-[11px] text-ink-400 font-mono mt-0.5">
-                      {formatBytes(file.sizeBytes)} • by {file.uploadedByDeviceName}
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  size="sm"
-                  onClick={() => onDownloadFile(file.fileId, file.fileName)}
-                  className="ml-3 text-xs shrink-0"
+            {room.files.map((file) => {
+              const isUploader = file.uploadedByDeviceId === currentDeviceId;
+              const isDownloading = downloadingFileId === file.fileId;
+              return (
+                <div
+                  key={file.fileId}
+                  className="flex items-center justify-between p-3.5 rounded-2xl bg-surface/70 border border-surface-hover hover:border-brand-500/30 transition-all"
                 >
-                  Download
-                </Button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500/20 text-brand-400">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M13 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V9L13 2Z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-ink-50" title={file.fileName}>
+                        {file.fileName}
+                      </p>
+                      <p className="text-[11px] text-ink-400 font-mono mt-0.5">
+                        {formatBytes(file.sizeBytes)} • {isUploader ? "Uploaded by You" : `by ${file.uploadedByDeviceName}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    disabled={isDownloading}
+                    onClick={() => handleDownload(file.fileId, file.fileName)}
+                    className="ml-3 text-xs shrink-0"
+                  >
+                    {isDownloading ? "Downloading..." : "Download"}
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

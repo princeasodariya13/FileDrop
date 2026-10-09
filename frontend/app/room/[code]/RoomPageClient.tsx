@@ -18,9 +18,11 @@ function RoomContent({ code }: RoomPageClientProps) {
     isConnecting,
     isUploading,
     uploadProgress,
+    uploadingFileName,
     error,
     joinRoom,
     uploadFileToRoom,
+    uploadFilesToRoom,
     downloadFile,
     leaveRoom,
   } = useConnectRoom(code);
@@ -33,7 +35,9 @@ function RoomContent({ code }: RoomPageClientProps) {
         isConnected={isConnected}
         isUploading={isUploading}
         uploadProgress={uploadProgress}
+        uploadingFileName={uploadingFileName}
         onUploadFile={uploadFileToRoom}
+        onUploadFiles={uploadFilesToRoom}
         onDownloadFile={downloadFile}
         onLeaveRoom={leaveRoom}
       />

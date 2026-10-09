@@ -27,6 +27,7 @@ export function useConnectRoom(initialCode?: string) {
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadingFileName, setUploadingFileName] = useState<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const { push } = useToast();
@@ -241,7 +242,7 @@ export function useConnectRoom(initialCode?: string) {
     }
   };
 
-  // Upload a file directly into the active room
+  // Upload a single file directly into the active room
   const uploadFileToRoom = async (file: File) => {
     if (!room || !deviceId || !deviceToken) {
       push("You must be connected to a room to upload files.", "error");
@@ -250,140 +251,66 @@ export function useConnectRoom(initialCode?: string) {
 
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadingFileName(file.name);
 
     try {
-      // 1. Initialize upload session using existing FileDrop upload API
-      const initRes = await fetch(`${API_BASE}/api/uploads/initiate`, {
+      // Import existing API helpers
+      const { createUploadSession, completeUpload } = await import("@/lib/api/uploads");
+      const { uploadPartWithProgress } = await import("@/lib/api/client");
+
+      // 1. Initialize upload session using existing FileDrop upload API (/api/uploads/session)
+      const session = await createUploadSession(file, {
+        expirationSeconds: 3600, // 1 hour room file TTL
+        downloadLimit: null,
+      });
+
+      const partSize = session.partSizeBytes;
+      const completedParts = [];
+
+      // 2. Upload parts directly to Backblaze B2 via presigned URLs with progress
+      for (let i = 0; i < session.parts.length; i++) {
+        const part = session.parts[i];
+        const start = (part.partNumber - 1) * partSize;
+        const end = Math.min(start + partSize, file.size);
+        const chunk = file.slice(start, end);
+
+        const etag = await uploadPartWithProgress(
+          part.presignedUrl,
+          chunk,
+          (loaded) => {
+            const overallLoaded = i * partSize + loaded;
+            const pct = Math.min(95, Math.round((overallLoaded / file.size) * 100));
+            setUploadProgress(pct);
+          }
+        );
+
+        completedParts.push({
+          partNumber: part.partNumber,
+          etag,
+        });
+      }
+
+      // 3. Complete multipart upload on backend
+      const uploadedFile = await completeUpload(session.sessionId, completedParts);
+      setUploadProgress(98);
+
+      // 4. Attach file to room
+      const attachRes = await fetch(`${API_BASE}/api/rooms/${room.roomCode}/files`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": deviceId,
+          "x-device-token": deviceToken,
+        },
         body: JSON.stringify({
-          fileName: file.name,
-          sizeBytes: file.size,
-          mimeType: file.type || "application/octet-stream",
-          expirationSeconds: 3600, // 1 hour room file TTL
+          fileId: uploadedFile.fileId,
+          possessionToken: uploadedFile.possessionToken,
         }),
       });
 
-      const initBody = await initRes.json();
-      if (!initRes.ok || !initBody.success) {
-        throw new Error(initBody?.error?.message || "Failed to initiate file upload.");
-      }
-
-      const { sessionId, uploadType, presignedUrl, parts: presignedParts } = initBody.data;
-
-      // 2. Upload bytes directly to Backblaze B2 via presigned URL(s)
-      if (uploadType === "single" && presignedUrl) {
-        setUploadProgress(30);
-        const putRes = await fetch(presignedUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": file.type || "application/octet-stream",
-          },
-          body: file,
-        });
-
-        if (!putRes.ok) {
-          throw new Error("Direct storage upload failed. Please try again.");
-        }
-        setUploadProgress(80);
-
-        // Complete upload
-        const completeRes = await fetch(`${API_BASE}/api/uploads/complete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId,
-            parts: [{ partNumber: 1, etag: putRes.headers.get("etag")?.replace(/"/g, "") || "single-part" }],
-          }),
-        });
-
-        const completeBody = await completeRes.json();
-        if (!completeRes.ok || !completeBody.success) {
-          throw new Error(completeBody?.error?.message || "Failed to finalize upload.");
-        }
-
-        const uploadedFile = completeBody.data;
-
-        // 3. Attach file to room
-        const attachRes = await fetch(`${API_BASE}/api/rooms/${room.roomCode}/files`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-device-id": deviceId,
-            "x-device-token": deviceToken,
-          },
-          body: JSON.stringify({
-            fileId: uploadedFile.fileId,
-            possessionToken: uploadedFile.possessionToken,
-          }),
-        });
-
-        const attachBody = await attachRes.json();
-        if (attachRes.ok && attachBody.success) {
-          setRoom((prev) => (prev ? { ...prev, files: attachBody.data.files } : prev));
-        }
-      } else if (uploadType === "multipart" && presignedParts) {
-        // Multipart upload for larger files
-        const partSize = 64 * 1024 * 1024; // 64MB parts
-        const completedParts: Array<{ partNumber: number; etag: string }> = [];
-
-        for (let i = 0; i < presignedParts.length; i++) {
-          const part = presignedParts[i];
-          const start = (part.partNumber - 1) * partSize;
-          const end = Math.min(start + partSize, file.size);
-          const chunk = file.slice(start, end);
-
-          const partPut = await fetch(part.presignedUrl, {
-            method: "PUT",
-            body: chunk,
-          });
-
-          if (!partPut.ok) {
-            throw new Error(`Failed to upload part ${part.partNumber}`);
-          }
-
-          completedParts.push({
-            partNumber: part.partNumber,
-            etag: partPut.headers.get("etag")?.replace(/"/g, "") || `part-${part.partNumber}`,
-          });
-
-          setUploadProgress(Math.round(((i + 1) / presignedParts.length) * 80));
-        }
-
-        const completeRes = await fetch(`${API_BASE}/api/uploads/complete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId,
-            parts: completedParts,
-          }),
-        });
-
-        const completeBody = await completeRes.json();
-        if (!completeRes.ok || !completeBody.success) {
-          throw new Error(completeBody?.error?.message || "Failed to complete multipart upload.");
-        }
-
-        const uploadedFile = completeBody.data;
-
-        // Attach file to room
-        const attachRes = await fetch(`${API_BASE}/api/rooms/${room.roomCode}/files`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-device-id": deviceId,
-            "x-device-token": deviceToken,
-          },
-          body: JSON.stringify({
-            fileId: uploadedFile.fileId,
-            possessionToken: uploadedFile.possessionToken,
-          }),
-        });
-
-        const attachBody = await attachRes.json();
-        if (attachRes.ok && attachBody.success) {
-          setRoom((prev) => (prev ? { ...prev, files: attachBody.data.files } : prev));
-        }
+      const attachBody = await attachRes.json();
+      if (attachRes.ok && attachBody.success) {
+        setRoom((prev) => (prev ? { ...prev, files: attachBody.data.files } : prev));
       }
 
       setUploadProgress(100);
@@ -394,8 +321,18 @@ export function useConnectRoom(initialCode?: string) {
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
+      setUploadingFileName(null);
     }
   };
+
+  // Upload multiple files sequentially to prevent concurrent collisions
+  const uploadFilesToRoom = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      await uploadFileToRoom(files[i]);
+    }
+  };
+
 
   // Download a shared room file
   const downloadFile = async (fileId: string, fileName: string) => {
@@ -516,10 +453,12 @@ export function useConnectRoom(initialCode?: string) {
     isConnecting,
     isUploading,
     uploadProgress,
+    uploadingFileName,
     error,
     createRoom,
     joinRoom,
     uploadFileToRoom,
+    uploadFilesToRoom,
     downloadFile,
     leaveRoom,
   };

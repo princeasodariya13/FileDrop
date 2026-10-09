@@ -15,10 +15,12 @@ export function ConnectDevicesSection() {
     isConnecting,
     isUploading,
     uploadProgress,
+    uploadingFileName,
     error,
     createRoom,
     joinRoom,
     uploadFileToRoom,
+    uploadFilesToRoom,
     downloadFile,
     leaveRoom,
   } = useConnectRoom();
@@ -35,7 +37,9 @@ export function ConnectDevicesSection() {
         isConnected={isConnected}
         isUploading={isUploading}
         uploadProgress={uploadProgress}
+        uploadingFileName={uploadingFileName}
         onUploadFile={uploadFileToRoom}
+        onUploadFiles={uploadFilesToRoom}
         onDownloadFile={downloadFile}
         onLeaveRoom={leaveRoom}
       />
