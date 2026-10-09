@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useConnectRoom } from "@/hooks/useConnectRoom";
 import { RoomView } from "./RoomView";
+import { ConnectDevicesSkeleton } from "./ConnectDevicesSkeleton";
 import { Button } from "@/components/ui/Button";
 import { QRScannerModal } from "@/components/ui/QRScannerModal";
 import { getDeviceDefaults } from "@/utils/device";
@@ -16,6 +17,7 @@ export function ConnectDevicesSection() {
     isConnected,
     isHost,
     isConnecting,
+    isInitializing,
     isUploading,
     uploadProgress,
     uploadingFileName,
@@ -36,6 +38,10 @@ export function ConnectDevicesSection() {
   const [roomName, setRoomName] = useState<string>("");
   const [deviceName, setDeviceName] = useState<string>(() => getDeviceDefaults().deviceName);
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+
+  if (isInitializing) {
+    return <ConnectDevicesSkeleton />;
+  }
 
   if (room) {
     return (

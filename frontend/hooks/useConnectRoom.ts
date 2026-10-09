@@ -134,6 +134,7 @@ export function useConnectRoom(initialCode?: string) {
   const [isHost, setIsHost] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -1004,6 +1005,10 @@ export function useConnectRoom(initialCode?: string) {
         }
       } catch (e) {
         // Keep storage on network error so user isn't kicked out during blips
+      } finally {
+        if (!isCancelled) {
+          setIsInitializing(false);
+        }
       }
     };
 
@@ -1044,6 +1049,7 @@ export function useConnectRoom(initialCode?: string) {
     isHost,
     isConnected,
     isConnecting,
+    isInitializing,
     isUploading,
     uploadProgress,
     uploadingFileName,

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useConnectRoom } from "@/hooks/useConnectRoom";
 import { RoomView } from "@/components/room/RoomView";
+import { ConnectDevicesSkeleton } from "@/components/room/ConnectDevicesSkeleton";
 import { ToastProvider } from "@/components/ui/Toast";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +24,7 @@ function RoomContent({ code }: RoomPageClientProps) {
     isHost,
     isConnected,
     isConnecting,
+    isInitializing,
     isUploading,
     uploadProgress,
     uploadingFileName,
@@ -89,6 +91,10 @@ function RoomContent({ code }: RoomPageClientProps) {
       isCancelled = true;
     };
   }, [code, room]);
+
+  if (isInitializing) {
+    return <ConnectDevicesSkeleton />;
+  }
 
   if (room) {
     return (
