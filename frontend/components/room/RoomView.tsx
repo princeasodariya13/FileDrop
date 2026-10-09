@@ -506,7 +506,7 @@ export function RoomView({
       {pendingFiles.length > 0 && (
         <div
           ref={dropdownRef}
-          className="relative z-20 rounded-card p-5 border border-brand-500/30 bg-surface/80 backdrop-blur-xl shadow-xl space-y-4 animate-fade-in"
+          className="relative z-20 rounded-card p-5 border border-brand-500/30 bg-surface/80 backdrop-blur-xl shadow-xl space-y-4 animate-fade-in overflow-visible"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-surface pb-3">
             <div className="space-y-0.5">
@@ -543,7 +543,7 @@ export function RoomView({
             </div>
           </div>
 
-          <div className="space-y-2.5 max-h-96 overflow-y-auto no-scrollbar">
+          <div className="space-y-2.5 overflow-visible">
             {pendingFiles.map((item) => {
               const isDropdownOpen = activeDropdownId === item.id;
               const hasSpecificRecipients = item.recipientDeviceIds.length > 0;
@@ -564,7 +564,7 @@ export function RoomView({
                   key={item.id}
                   className={`relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl border transition-all ${
                     isDropdownOpen
-                      ? "z-30 bg-surface/95 border-brand-500/50 shadow-xl ring-1 ring-brand-500/30"
+                      ? "z-40 bg-surface/95 border-brand-500/50 shadow-xl ring-1 ring-brand-500/30"
                       : "z-10 bg-surface/60 border-surface-hover hover:border-brand-500/20"
                   }`}
                 >
@@ -622,10 +622,10 @@ export function RoomView({
                         </svg>
                       </button>
 
-                      {/* Recipient Dropdown Menu */}
+                      {/* Recipient Dropdown Menu — Theme Adaptive Card with High Stacking Context */}
                       {isDropdownOpen && (
-                        <div className="absolute right-0 top-full mt-1.5 w-64 rounded-2xl bg-zinc-900/98 backdrop-blur-2xl border border-brand-500/30 shadow-2xl p-2.5 z-50 space-y-1 animate-scale-up ring-1 ring-black/40">
-                          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-ink-400">
+                        <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl dropdown-card p-2.5 z-50 space-y-1.5 animate-scale-up ring-1 ring-black/10 dark:ring-white/10">
+                          <div className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider modal-sub">
                             Select Recipients
                           </div>
 
@@ -633,10 +633,10 @@ export function RoomView({
                           <button
                             type="button"
                             onClick={() => selectAllDevices(item.id)}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-colors text-left ${
+                            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-colors text-left ${
                               !hasSpecificRecipients
-                                ? "bg-brand-500/20 text-brand-300 font-semibold"
-                                : "text-ink-200 hover:bg-surface-hover"
+                                ? "bg-brand-500/15 text-brand-600 dark:text-brand-300 font-semibold border border-brand-500/30"
+                                : "dropdown-item rounded-xl"
                             }`}
                           >
                             <span className="flex items-center gap-2">
@@ -644,7 +644,7 @@ export function RoomView({
                               <span>All Connected Devices</span>
                             </span>
                             {!hasSpecificRecipients && (
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-brand-400">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-brand-500">
                                 <polyline points="20 6 9 17 4 12" />
                               </svg>
                             )}
@@ -652,16 +652,16 @@ export function RoomView({
 
                           <div className="my-1 border-t border-surface" />
 
-                          <div className="px-2 py-0.5 text-[10px] font-semibold text-ink-500 uppercase tracking-wider">
+                          <div className="px-2 py-0.5 text-[10px] font-semibold modal-sub uppercase tracking-wider">
                             Or Specific Devices
                           </div>
 
                           {peerDevices.length === 0 ? (
-                            <div className="px-2.5 py-2 text-[11px] text-ink-500 italic">
-                              No other devices connected yet. When peers join, you can choose them directly.
+                            <div className="px-2.5 py-2 text-[11px] modal-sub italic">
+                              No other devices connected yet.
                             </div>
                           ) : (
-                            <div className="space-y-0.5 max-h-40 overflow-y-auto no-scrollbar">
+                            <div className="space-y-0.5 max-h-48 overflow-y-auto no-scrollbar">
                               {peerDevices.map((peer) => {
                                 const isChecked = item.recipientDeviceIds.includes(peer.deviceId);
                                 return (
@@ -671,8 +671,8 @@ export function RoomView({
                                     onClick={() => toggleRecipientDevice(item.id, peer.deviceId)}
                                     className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-colors text-left ${
                                       isChecked
-                                        ? "bg-amber-500/20 text-amber-300 font-semibold"
-                                        : "text-ink-200 hover:bg-surface-hover"
+                                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-300 font-semibold border border-amber-500/30"
+                                        : "dropdown-item rounded-xl"
                                     }`}
                                   >
                                     <span className="flex items-center gap-2 truncate">
@@ -680,11 +680,11 @@ export function RoomView({
                                         type="checkbox"
                                         readOnly
                                         checked={isChecked}
-                                        className="rounded border-surface-hover bg-surface text-amber-500 focus:ring-0"
+                                        className="rounded border-surface text-amber-500 focus:ring-0"
                                       />
                                       <span className="truncate">{peer.deviceName}</span>
                                       {peer.isHost && (
-                                        <span className="px-1 py-0.2 rounded text-[9px] font-semibold bg-brand-500/20 text-brand-300">
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-brand-500/20 text-brand-600 dark:text-brand-300">
                                           Host
                                         </span>
                                       )}
@@ -928,9 +928,9 @@ export function RoomView({
       {/* Delete Confirmation Modal */}
       {mounted && typeof document !== "undefined" && fileToDelete && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl border border-red-500/30 bg-white dark:bg-[#13131a] p-6 shadow-2xl space-y-4 animate-scale-up ring-1 ring-black/5 dark:ring-white/10">
+          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 dark:text-red-400">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
                 <svg
                   width="20"
                   height="20"
@@ -945,36 +945,34 @@ export function RoomView({
                 </svg>
               </div>
               <div>
-                <h3 className="text-sm font-bold font-heading text-slate-900 dark:text-ink-50">Delete Shared File?</h3>
-                <p className="text-xs text-slate-500 dark:text-ink-400">This action cannot be undone.</p>
+                <h3 className="text-sm font-bold font-heading modal-title">Delete Shared File?</h3>
+                <p className="text-xs modal-sub">This action cannot be undone.</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-ink-300 leading-relaxed">
+            <p className="text-xs modal-body leading-relaxed">
               Are you sure you want to remove{" "}
-              <span className="font-semibold text-slate-900 dark:text-ink-50">"{fileToDelete.fileName}"</span> from the
+              <span className="font-semibold modal-title">"{fileToDelete.fileName}"</span> from the
               room? Connected devices will no longer be able to download it.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button
-                variant="secondary"
-                size="sm"
+              <button
+                type="button"
                 disabled={isDeleting}
                 onClick={() => setFileToDelete(null)}
-                className="text-xs"
+                className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors"
               >
                 Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
+              </button>
+              <button
+                type="button"
                 disabled={isDeleting}
                 onClick={confirmDeleteFile}
-                className="text-xs bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-md shadow-red-500/20 transition-all"
               >
                 {isDeleting ? "Deleting..." : "Delete File"}
-              </Button>
+              </button>
             </div>
           </div>
         </div>,
@@ -984,9 +982,9 @@ export function RoomView({
       {/* Device Removal Confirmation Modal */}
       {mounted && typeof document !== "undefined" && deviceToRemove && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl border border-red-500/30 bg-white dark:bg-[#13131a] p-6 shadow-2xl space-y-4 animate-scale-up ring-1 ring-black/5 dark:ring-white/10">
+          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 dark:text-red-400">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
                 <svg
                   width="20"
                   height="20"
@@ -1004,36 +1002,34 @@ export function RoomView({
                 </svg>
               </div>
               <div>
-                <h3 className="text-sm font-bold font-heading text-slate-900 dark:text-ink-50">Remove Device?</h3>
-                <p className="text-xs text-slate-500 dark:text-ink-400">Disconnect from live room</p>
+                <h3 className="text-sm font-bold font-heading modal-title">Remove Device?</h3>
+                <p className="text-xs modal-sub">Disconnect from live room</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-ink-300 leading-relaxed">
+            <p className="text-xs modal-body leading-relaxed">
               Are you sure you want to remove{" "}
-              <span className="font-semibold text-slate-900 dark:text-ink-50">"{deviceToRemove.deviceName}"</span> from
+              <span className="font-semibold modal-title">"{deviceToRemove.deviceName}"</span> from
               this room? It will be disconnected immediately and cannot reconnect using its current session.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button
-                variant="secondary"
-                size="sm"
+              <button
+                type="button"
                 disabled={isRemovingDevice}
                 onClick={() => setDeviceToRemove(null)}
-                className="text-xs"
+                className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors"
               >
                 Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
+              </button>
+              <button
+                type="button"
                 disabled={isRemovingDevice}
                 onClick={confirmRemoveDevice}
-                className="text-xs bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-md shadow-red-500/20 transition-all"
               >
                 {isRemovingDevice ? "Removing..." : "Remove Device"}
-              </Button>
+              </button>
             </div>
           </div>
         </div>,
@@ -1043,9 +1039,9 @@ export function RoomView({
       {/* Leave Room Confirmation Modal */}
       {mounted && typeof document !== "undefined" && isLeaveModalOpen && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#13131a] p-6 shadow-2xl space-y-4 animate-scale-up ring-1 ring-black/5 dark:ring-white/10">
+          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 dark:text-red-400">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
                 <svg
                   width="20"
                   height="20"
@@ -1062,12 +1058,12 @@ export function RoomView({
                 </svg>
               </div>
               <div>
-                <h3 className="text-sm font-bold font-heading text-slate-900 dark:text-ink-50">Leave Live Room?</h3>
-                <p className="text-xs text-slate-500 dark:text-ink-400">Disconnect from #{room.roomCode}</p>
+                <h3 className="text-sm font-bold font-heading modal-title">Leave Live Room?</h3>
+                <p className="text-xs modal-sub">Disconnect from #{room.roomCode}</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-ink-300 leading-relaxed">
+            <p className="text-xs modal-body leading-relaxed">
               {isHost && room.devices.length > 1 ? (
                 <>
                   You are the host. If you leave, host ownership will be automatically transferred to
@@ -1086,24 +1082,22 @@ export function RoomView({
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button
-                variant="secondary"
-                size="sm"
+              <button
+                type="button"
                 disabled={isLeaving}
                 onClick={() => setIsLeaveModalOpen(false)}
-                className="text-xs"
+                className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors"
               >
                 Stay
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
+              </button>
+              <button
+                type="button"
                 disabled={isLeaving}
                 onClick={handleConfirmLeave}
-                className="text-xs bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-md shadow-red-500/20 transition-all"
               >
                 {isLeaving ? "Leaving..." : "Leave Room"}
-              </Button>
+              </button>
             </div>
           </div>
         </div>,

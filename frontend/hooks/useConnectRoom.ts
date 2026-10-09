@@ -17,6 +17,39 @@ interface StoredRoomSession {
   isHost: boolean;
 }
 
+function saveStoredSession(session: StoredRoomSession) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("filedrop_room_session_changed", { detail: session }));
+    }
+  } catch (e) {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch {}
+  }
+}
+
+function clearStoredSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("filedrop_room_session_changed", { detail: null }));
+    }
+  } catch (e) {}
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {}
+}
+
+function getStoredSession(): StoredRoomSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+}
+
 export function useConnectRoom(initialCode?: string) {
   const [room, setRoom] = useState<RoomState | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
@@ -82,16 +115,19 @@ export function useConnectRoom(initialCode?: string) {
       push(`${newPeer.deviceName} joined the room`, "info");
     });
 
-    socket.on("peer_left", ({ deviceId: leftDeviceId, deviceName: leftName }: { deviceId: string; deviceName?: string }) => {
-      setRoom((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          devices: prev.devices.filter((d) => d.deviceId !== leftDeviceId),
-        };
-      });
-      if (leftName) {
-        push(`${leftName} left the room`, "info");
+    socket.on("peer_left", ({ deviceId: leftDeviceId, deviceName: leftName, reason }: { deviceId: string; deviceName?: string; reason?: string }) => {
+      // Only remove device from active room membership if departure was voluntary or removal by host
+      if (reason === "voluntary_leave" || reason === "removed_by_host") {
+        setRoom((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            devices: prev.devices.filter((d) => d.deviceId !== leftDeviceId),
+          };
+        });
+        if (leftName) {
+          push(`${leftName} left the room`, "info");
+        }
       }
     });
 
@@ -136,9 +172,7 @@ export function useConnectRoom(initialCode?: string) {
 
     socket.on("device_removed", ({ message }: { message?: string }) => {
       cleanupSocket();
-      try {
-        sessionStorage.removeItem(SESSION_KEY);
-      } catch (e) {}
+      clearStoredSession();
       setRoom(null);
       setDeviceId(null);
       setDeviceToken(null);
@@ -149,6 +183,7 @@ export function useConnectRoom(initialCode?: string) {
     });
 
     socket.on("room_closed", () => {
+      clearStoredSession();
       setRoom((prev) => (prev ? { ...prev, status: "closed" } : prev));
       push("This room has ended or expired.", "info");
     });
@@ -192,15 +227,12 @@ export function useConnectRoom(initialCode?: string) {
       setDeviceToken(data.deviceToken);
       setIsHost(true);
 
-      const session: StoredRoomSession = {
+      saveStoredSession({
         roomCode: data.roomCode,
         deviceId: data.deviceId,
         deviceToken: data.deviceToken,
         isHost: true,
-      };
-      try {
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-      } catch (e) {}
+      });
 
       connectSocket(data.roomCode, data.deviceId, data.deviceToken);
       push(`Room created! Code: ${data.roomCode}`, "success");
@@ -256,15 +288,12 @@ export function useConnectRoom(initialCode?: string) {
       setDeviceToken(data.deviceToken);
       setIsHost(data.isHost || false);
 
-      const session: StoredRoomSession = {
+      saveStoredSession({
         roomCode: data.roomCode,
         deviceId: data.deviceId,
         deviceToken: data.deviceToken,
         isHost: data.isHost || false,
-      };
-      try {
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-      } catch (e) {}
+      });
 
       connectSocket(data.roomCode, data.deviceId, data.deviceToken);
       push(`Connected to Room ${data.roomCode}`, "success");
@@ -290,7 +319,6 @@ export function useConnectRoom(initialCode?: string) {
     setUploadingFileName(file.name);
 
     try {
-      // Import existing API helpers
       const { createUploadSession, completeUpload } = await import("@/lib/api/uploads");
       const { uploadPartWithProgress } = await import("@/lib/api/client");
 
@@ -370,7 +398,6 @@ export function useConnectRoom(initialCode?: string) {
       await uploadFileToRoom(files[i]);
     }
   };
-
 
   // Download a shared room file
   const downloadFile = async (fileId: string, fileName: string) => {
@@ -480,7 +507,7 @@ export function useConnectRoom(initialCode?: string) {
     }
   };
 
-  // Leave room
+  // Leave room voluntarily
   const leaveRoom = async () => {
     if (room && deviceId) {
       try {
@@ -507,10 +534,7 @@ export function useConnectRoom(initialCode?: string) {
       }
     }
 
-    try {
-      sessionStorage.removeItem(SESSION_KEY);
-    } catch (e) {}
-
+    clearStoredSession();
     cleanupSocket();
     setRoom(null);
     setDeviceId(null);
@@ -520,50 +544,46 @@ export function useConnectRoom(initialCode?: string) {
     push("Left the room", "info");
   };
 
-  // Auto-restore session from sessionStorage or initialCode
+  // Auto-restore session from localStorage or initialCode
   useEffect(() => {
     const restoreSession = async () => {
       try {
-        const storedStr = sessionStorage.getItem(SESSION_KEY);
-        if (storedStr) {
-          const stored: StoredRoomSession = JSON.parse(storedStr);
-          if (stored.roomCode && stored.deviceId && stored.deviceToken) {
-            // Fetch current state
-            const res = await fetch(`${API_BASE}/api/rooms/${stored.roomCode}`, {
-              headers: { "x-device-id": stored.deviceId },
-            });
-            const body = await res.json();
-            if (res.ok && body.success && body.data) {
-              const currentDev = body.data.devices?.find(
-                (d: RoomDevice) => d.deviceId === stored.deviceId
-              );
-              if (currentDev) {
-                setRoom({
-                  roomCode: body.data.roomCode,
-                  roomId: body.data.roomId,
-                  status: body.data.status,
-                  expiresAt: body.data.expiresAt,
-                  lastActivityAt: body.data.lastActivityAt,
-                  devices: body.data.devices,
-                  files: body.data.files || [],
-                });
-                setDeviceId(stored.deviceId);
-                setDeviceToken(stored.deviceToken);
-                setIsHost(currentDev.isHost);
-                connectSocket(stored.roomCode, stored.deviceId, stored.deviceToken);
-                return;
-              }
+        const stored = getStoredSession();
+        if (stored && stored.roomCode && stored.deviceId && stored.deviceToken) {
+          // Verify with MongoDB backend
+          const res = await fetch(`${API_BASE}/api/rooms/${stored.roomCode}`, {
+            headers: {
+              "x-device-id": stored.deviceId,
+              "x-device-token": stored.deviceToken,
+            },
+          });
+          const body = await res.json();
+          if (res.ok && body.success && body.data) {
+            const currentDev = body.data.devices?.find(
+              (d: RoomDevice) => d.deviceId === stored.deviceId
+            );
+            if (currentDev) {
+              setRoom({
+                roomCode: body.data.roomCode,
+                roomId: body.data.roomId,
+                status: body.data.status,
+                expiresAt: body.data.expiresAt,
+                lastActivityAt: body.data.lastActivityAt,
+                devices: body.data.devices,
+                files: body.data.files || [],
+              });
+              setDeviceId(stored.deviceId);
+              setDeviceToken(stored.deviceToken);
+              setIsHost(currentDev.isHost);
+              connectSocket(stored.roomCode, stored.deviceId, stored.deviceToken);
+              return;
             }
-            // If room not found, expired, or device removed, clear stale session
-            try {
-              sessionStorage.removeItem(SESSION_KEY);
-            } catch (e) {}
           }
+          // If room not found or device no longer part of active room membership, clear stale storage
+          clearStoredSession();
         }
       } catch (e) {
-        try {
-          sessionStorage.removeItem(SESSION_KEY);
-        } catch (err) {}
+        // Keep storage on network error so user isn't kicked out during blips
       }
 
       // If initial code provided (e.g. from URL /room/123456)
@@ -578,6 +598,24 @@ export function useConnectRoom(initialCode?: string) {
       cleanupSocket();
     };
   }, [initialCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Multi-tab sync: listen for storage events
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === SESSION_KEY) {
+        if (!e.newValue) {
+          // Session was cleared in another tab (e.g. Leave Room)
+          cleanupSocket();
+          setRoom(null);
+          setDeviceId(null);
+          setDeviceToken(null);
+          setIsHost(false);
+        }
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [cleanupSocket]);
 
   return {
     room,

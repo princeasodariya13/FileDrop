@@ -204,12 +204,12 @@ async function handleLeaveRoom(socket: Socket): Promise<void> {
   const roomChannel = `room:${data.roomCode}`;
   socket.leave(roomChannel);
 
-  // Broadcast peer_left to room members
+  // Broadcast peer_left with transient disconnect reason
   socket.to(roomChannel).emit("peer_left", {
     deviceId: data.deviceId,
     deviceName: data.deviceName,
     leftAt: new Date(),
-    reason: "voluntary_leave",
+    reason: "disconnect",
   });
 
   delete (socket.data as any).deviceId;

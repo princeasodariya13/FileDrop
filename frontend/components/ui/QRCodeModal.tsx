@@ -91,13 +91,13 @@ export function QRCodeModal({
     >
       <div
         ref={modalRef}
-        className="relative w-full max-w-sm rounded-3xl bg-white dark:bg-[#13131a] border border-slate-200 dark:border-brand-500/30 p-6 sm:p-7 shadow-2xl animate-fade-in-scale space-y-5 text-center ring-1 ring-black/5 dark:ring-white/10"
+        className="relative w-full max-w-sm rounded-3xl modal-card p-6 sm:p-7 shadow-2xl animate-fade-in-scale space-y-5 text-center"
       >
         {/* Close Button */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 h-8 w-8 rounded-full bg-slate-100 dark:bg-surface border border-slate-200 dark:border-surface-hover flex items-center justify-center text-slate-500 dark:text-ink-400 hover:text-slate-900 dark:hover:text-ink-50 hover:bg-slate-200 dark:hover:bg-surface-hover transition-colors"
+          className="absolute top-4 right-4 h-8 w-8 rounded-full modal-cancel-btn flex items-center justify-center transition-colors"
           aria-label="Close QR modal"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -108,7 +108,7 @@ export function QRCodeModal({
 
         {/* Modal Header */}
         <div className="space-y-1 pr-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-500 dark:text-brand-300 text-[11px] font-semibold uppercase tracking-wider">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-500 text-[11px] font-semibold uppercase tracking-wider">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" />
               <rect x="14" y="3" width="7" height="7" />
@@ -117,12 +117,12 @@ export function QRCodeModal({
             </svg>
             <span>Scan to Download</span>
           </div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-ink-50 truncate font-heading">{title}</h3>
-          {subtitle && <p className="text-xs text-slate-500 dark:text-ink-400 font-mono">{subtitle}</p>}
+          <h3 className="text-base font-bold modal-title truncate font-heading">{title}</h3>
+          {subtitle && <p className="text-xs modal-sub font-mono">{subtitle}</p>}
         </div>
 
         {/* QR Code Canvas / Image Container */}
-        <div className="relative mx-auto flex items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200 dark:border-brand-500/20 aspect-square max-w-[240px]">
+        <div className="relative mx-auto flex items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200 aspect-square max-w-[240px]">
           {isGenerating ? (
             <div className="flex flex-col items-center gap-2 text-ink-600 animate-pulse">
               <svg className="animate-spin h-6 w-6 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -143,13 +143,13 @@ export function QRCodeModal({
         </div>
 
         {code && (
-          <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold text-slate-900 bg-slate-100 border border-slate-200/80 py-2 px-3.5 rounded-xl shadow-xs">
-            <span className="text-slate-800">6-Digit Code:</span>
-            <span className="text-black font-extrabold tracking-widest text-sm">{code}</span>
+          <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold modal-title bg-surface border border-surface-hover py-2 px-3.5 rounded-xl shadow-xs">
+            <span className="modal-sub">6-Digit Code:</span>
+            <span className="font-extrabold tracking-widest text-sm">{code}</span>
           </div>
         )}
 
-        <p className="text-[11px] text-slate-500 dark:text-ink-400 leading-tight">
+        <p className="text-[11px] modal-sub leading-tight">
           Point any smartphone camera at the QR code to instantly open and download this file.
         </p>
 

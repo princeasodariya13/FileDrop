@@ -42,6 +42,29 @@ export function UploadFlow() {
   const resumeInputRef = useRef<HTMLInputElement>(null);
   const addFilesInputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-switch to Connect Devices tab if active room session exists
+  useEffect(() => {
+    try {
+      const roomSession = localStorage.getItem("filedrop_active_room_session");
+      if (roomSession) {
+        const parsed = JSON.parse(roomSession);
+        if (parsed && parsed.roomCode && parsed.deviceId && parsed.deviceToken) {
+          setActiveTab("connect");
+        }
+      }
+    } catch (e) {}
+
+    const handleRoomSessionChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail.roomCode) {
+        setActiveTab("connect");
+      }
+    };
+
+    window.addEventListener("filedrop_room_session_changed", handleRoomSessionChanged);
+    return () => window.removeEventListener("filedrop_room_session_changed", handleRoomSessionChanged);
+  }, []);
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem("filedrop_active_upload");

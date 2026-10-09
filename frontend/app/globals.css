@@ -4,6 +4,7 @@
   /* Dark Theme variables (default for FileDrop) */
   --ink-50: #fafafa;
   --ink-100: #f4f4f5;
+  --ink-200: #e4e4e7;
   --ink-300: #d4d4d8;
   --ink-400: #a1a1aa;
   --ink-600: #52525b;
@@ -11,7 +12,7 @@
   --ink-900: #18181b;
 
   --bg-base: #050507;
-  --bg-panel: rgba(20, 20, 24, 0.6);
+  --bg-panel: #13131a;
   --border-color: rgba(255, 255, 255, 0.08);
   --bg-gradient-1: rgba(99, 102, 241, 0.12);
   --bg-gradient-2: rgba(168, 85, 247, 0.12);
@@ -19,27 +20,58 @@
   --card-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   --surface: rgba(255, 255, 255, 0.05);
   --surface-hover: rgba(255, 255, 255, 0.1);
+
+  /* Modal & Dropdown Tokens (Dark Default) */
+  --bg-modal: #13131a;
+  --border-modal: rgba(255, 255, 255, 0.12);
+  --text-modal-title: #fafafa;
+  --text-modal-body: #d4d4d8;
+  --text-modal-sub: #a1a1aa;
+  --bg-modal-btn: rgba(255, 255, 255, 0.08);
+  --bg-modal-btn-hover: rgba(255, 255, 255, 0.15);
+  --text-modal-btn: #fafafa;
+  --border-modal-btn: rgba(255, 255, 255, 0.12);
+  --bg-dropdown: #14141c;
+  --border-dropdown: rgba(255, 255, 255, 0.12);
+  --text-dropdown: #fafafa;
+  --hover-dropdown: rgba(255, 255, 255, 0.08);
 }
 
 :root.light {
   /* Light Theme variables */
-  --ink-50: #18181b;
-  --ink-100: #27272a;
-  --ink-300: #52525b;
-  --ink-400: #71717a;
-  --ink-600: #a1a1aa;
-  --ink-800: #f4f4f5;
-  --ink-900: #fafafa;
+  --ink-50: #0f172a;
+  --ink-100: #1e293b;
+  --ink-200: #334155;
+  --ink-300: #475569;
+  --ink-400: #64748b;
+  --ink-600: #94a3b8;
+  --ink-800: #f1f5f9;
+  --ink-900: #f8fafc;
 
   --bg-base: #f8fafc;
-  --bg-panel: rgba(255, 255, 255, 0.8);
-  --border-color: rgba(0, 0, 0, 0.08);
+  --bg-panel: #ffffff;
+  --border-color: #e2e8f0;
   --bg-gradient-1: rgba(99, 102, 241, 0.05);
   --bg-gradient-2: rgba(168, 85, 247, 0.05);
 
-  --card-shadow: 0 4px 30px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  --surface: rgba(0, 0, 0, 0.04);
-  --surface-hover: rgba(0, 0, 0, 0.08);
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --surface: #f1f5f9;
+  --surface-hover: #e2e8f0;
+
+  /* Modal & Dropdown Tokens (Light) */
+  --bg-modal: #ffffff;
+  --border-modal: #e2e8f0;
+  --text-modal-title: #0f172a;
+  --text-modal-body: #334155;
+  --text-modal-sub: #64748b;
+  --bg-modal-btn: #f1f5f9;
+  --bg-modal-btn-hover: #e2e8f0;
+  --text-modal-btn: #0f172a;
+  --border-modal-btn: #cbd5e1;
+  --bg-dropdown: #ffffff;
+  --border-dropdown: #e2e8f0;
+  --text-dropdown: #0f172a;
+  --hover-dropdown: #f1f5f9;
 }
 
 @theme {
@@ -57,6 +89,7 @@
   /* Ink (neutral) palette - mapped to dynamic CSS vars */
   --color-ink-50: var(--ink-50);
   --color-ink-100: var(--ink-100);
+  --color-ink-200: var(--ink-200);
   --color-ink-300: var(--ink-300);
   --color-ink-400: var(--ink-400);
   --color-ink-600: var(--ink-600);
@@ -106,6 +139,44 @@ body {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   box-shadow: var(--card-shadow);
+}
+
+/* Theme Adaptive Modal Card */
+.modal-card {
+  background-color: var(--bg-modal);
+  border: 1px solid var(--border-modal);
+  color: var(--text-modal-body);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+}
+
+.modal-title {
+  color: var(--text-modal-title);
+}
+
+.modal-sub {
+  color: var(--text-modal-sub);
+}
+
+.modal-body {
+  color: var(--text-modal-body);
+}
+
+.modal-cancel-btn {
+  background-color: var(--bg-modal-btn);
+  color: var(--text-modal-btn);
+  border: 1px solid var(--border-modal-btn);
+}
+
+.modal-cancel-btn:hover {
+  background-color: var(--bg-modal-btn-hover);
+}
+
+/* Theme Adaptive Dropdown Card */
+.dropdown-card {
+  background-color: var(--bg-dropdown);
+  border: 1px solid var(--border-dropdown);
+  color: var(--text-dropdown);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.35);
 }
 
 /* Focus ring utility */
