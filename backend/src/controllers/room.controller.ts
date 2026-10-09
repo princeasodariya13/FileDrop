@@ -14,10 +14,12 @@ import {
   createRoomSchema,
   joinRoomSchema,
   addRoomFileSchema,
+  updateRoomFileRecipientsSchema,
   leaveRoomSchema,
 } from "@/validators/room.validator";
 import {
   broadcastFileShared,
+  broadcastFileRecipientsUpdated,
   broadcastFileDeleted,
   broadcastDevicesUpdated,
   handleDeviceRemoved,
@@ -91,7 +93,7 @@ export async function createRoom(req: Request, res: Response, next: NextFunction
       throw new ApiError(400, "VALIDATION_ERROR", parsed.error.errors[0]?.message ?? "Invalid request body.");
     }
 
-    const { deviceName = "Host Device", deviceType = "unknown" } = parsed.data;
+    const { roomName = "Live Room", deviceName = "Host Device", deviceType = "unknown" } = parsed.data;
 
     // Secure code generation with collision retry loop
     let roomCode = "";
@@ -135,6 +137,7 @@ export async function createRoom(req: Request, res: Response, next: NextFunction
     const room = await RoomModel.create({
       roomId,
       roomCode,
+      roomName: (roomName || "Live Room").slice(0, 60),
       hostDeviceId: deviceId,
       creatorIpHash: ipHash,
       status: "active",
@@ -144,11 +147,12 @@ export async function createRoom(req: Request, res: Response, next: NextFunction
       lastActivityAt: now,
     });
 
-    logger.info({ roomId: room.roomId, roomCode: room.roomCode, hostDeviceId: deviceId }, "Connect Devices room created");
+    logger.info({ roomId: room.roomId, roomCode: room.roomCode, roomName: room.roomName, hostDeviceId: deviceId }, "Connect Devices room created");
 
     return ok(res, {
       roomCode: room.roomCode,
       roomId: room.roomId,
+      roomName: room.roomName,
       deviceId,
       deviceToken,
       expiresAt: room.expiresAt,
@@ -205,7 +209,7 @@ export async function joinRoom(req: Request, res: Response, next: NextFunction) 
     room.lastActivityAt = now;
     await room.save();
 
-    logger.info({ roomId: room.roomId, roomCode: room.roomCode, deviceId, deviceName }, "Device joined room");
+    logger.info({ roomId: room.roomId, roomCode: room.roomCode, roomName: room.roomName, deviceId, deviceName }, "Device joined room");
     broadcastDevicesUpdated(room.roomCode, sanitizeDevices(room.devices));
 
     const syncedFiles = await syncRoomFiles(room);
@@ -213,6 +217,7 @@ export async function joinRoom(req: Request, res: Response, next: NextFunction) 
     return ok(res, {
       roomCode: room.roomCode,
       roomId: room.roomId,
+      roomName: room.roomName || "Live Room",
       deviceId,
       deviceToken,
       isHost: false,
@@ -227,7 +232,7 @@ export async function joinRoom(req: Request, res: Response, next: NextFunction) 
 }
 
 /**
- * GET /api/rooms/active/lookup — Look up active room for this client IP/machine across browsers
+ * GET /api/rooms/active/lookup — Look up all active rooms for this client IP/machine across browsers
  */
 export async function getActiveRoomForClient(req: Request, res: Response, next: NextFunction) {
   try {
@@ -235,7 +240,7 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
     const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
     const now = new Date();
 
-    const activeRoom = await RoomModel.findOne({
+    const activeRoomsList = await RoomModel.find({
       $or: [
         { creatorIpHash: ipHash },
         { "devices.ipHash": ipHash },
@@ -244,22 +249,31 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
       expiresAt: { $gt: now },
     }).sort({ lastActivityAt: -1 });
 
-    if (!activeRoom) {
-      return ok(res, { activeRoom: null });
+    if (!activeRoomsList || activeRoomsList.length === 0) {
+      return ok(res, { activeRoom: null, activeRooms: [] });
     }
 
-    const syncedFiles = await syncRoomFiles(activeRoom);
+    const activeRooms = await Promise.all(
+      activeRoomsList.map(async (r) => {
+        const synced = await syncRoomFiles(r);
+        return {
+          roomCode: r.roomCode,
+          roomId: r.roomId,
+          roomName: r.roomName || "Live Room",
+          status: r.status,
+          expiresAt: r.expiresAt,
+          lastActivityAt: r.lastActivityAt,
+          devicesCount: r.devices.length,
+          devices: sanitizeDevices(r.devices),
+          filesCount: synced.length,
+          files: synced,
+        };
+      })
+    );
 
     return ok(res, {
-      activeRoom: {
-        roomCode: activeRoom.roomCode,
-        roomId: activeRoom.roomId,
-        status: activeRoom.status,
-        expiresAt: activeRoom.expiresAt,
-        lastActivityAt: activeRoom.lastActivityAt,
-        devices: sanitizeDevices(activeRoom.devices),
-        files: syncedFiles,
-      },
+      activeRoom: activeRooms[0] || null,
+      activeRooms,
     });
   } catch (err) {
     next(err);
@@ -308,6 +322,7 @@ export async function getRoomState(req: Request, res: Response, next: NextFuncti
     return ok(res, {
       roomCode: room.roomCode,
       roomId: room.roomId,
+      roomName: room.roomName || "Live Room",
       status: room.status,
       expiresAt: room.expiresAt,
       lastActivityAt: room.lastActivityAt,
@@ -389,12 +404,13 @@ export async function addFileToRoom(req: Request, res: Response, next: NextFunct
     let uploaderName = "Connected Device";
     if (callerDeviceId) {
       const callerDevice = room.devices.find((d) => d.deviceId === callerDeviceId);
-      if (callerDevice) {
-        if (callerDeviceToken && callerDevice.deviceToken !== callerDeviceToken) {
-          throw new ApiError(401, "UNAUTHORIZED", "Invalid device token for this room.");
-        }
-        uploaderName = callerDevice.deviceName;
+      if (!callerDevice) {
+        throw new ApiError(401, "UNAUTHORIZED", "Device is not an active member of this room.");
       }
+      if (callerDeviceToken && callerDevice.deviceToken !== callerDeviceToken) {
+        throw new ApiError(401, "UNAUTHORIZED", "Invalid device token for this room.");
+      }
+      uploaderName = callerDevice.deviceName;
     }
 
     // Verify file exists in FileModel and is active
@@ -772,6 +788,108 @@ export async function deleteRoomFile(req: Request, res: Response, next: NextFunc
       roomCode: room.roomCode,
       fileId,
       files: room.files,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PATCH /api/rooms/:code/files/:fileId/recipients — Modify authorized recipients for a room file
+ */
+export async function updateRoomFileRecipients(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rawCode = req.params.code;
+    const fileId = req.params.fileId;
+    if (!rawCode || !fileId) {
+      throw new ApiError(400, "INVALID_PARAMS", "Room code and file ID are required.");
+    }
+
+    const callerDeviceId = req.headers["x-device-id"] as string;
+    const callerDeviceToken = req.headers["x-device-token"] as string;
+
+    if (!callerDeviceId || !callerDeviceToken) {
+      throw new ApiError(401, "UNAUTHORIZED", "Device credentials required to update file recipients.");
+    }
+
+    const parsed = updateRoomFileRecipientsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ApiError(400, "VALIDATION_ERROR", parsed.error.errors[0]?.message ?? "Invalid recipient data.");
+    }
+
+    const { recipientDeviceIds = [] } = parsed.data;
+    const now = new Date();
+
+    const room = await RoomModel.findOne({
+      $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
+      status: "active",
+      expiresAt: { $gt: now },
+    });
+
+    if (!room) {
+      throw new ApiError(404, "ROOM_NOT_FOUND", "This room does not exist or has expired.");
+    }
+
+    // Authenticate caller device
+    const callerDevice = room.devices.find(
+      (d) => d.deviceId === callerDeviceId && d.deviceToken === callerDeviceToken
+    );
+    if (!callerDevice) {
+      throw new ApiError(401, "UNAUTHORIZED", "Invalid device authorization for this room.");
+    }
+
+    // Find file in room
+    const fileIndex = room.files.findIndex((f) => f.fileId === fileId);
+    if (fileIndex === -1) {
+      throw new ApiError(404, "FILE_NOT_FOUND", "This file is not associated with this room.");
+    }
+
+    const targetFile = room.files[fileIndex];
+
+    // Only uploader or room host can modify recipients
+    if (targetFile.uploadedByDeviceId !== callerDeviceId && !callerDevice.isHost) {
+      throw new ApiError(403, "FORBIDDEN", "Only the file uploader or room host can update recipients.");
+    }
+
+    // Filter valid recipient device IDs in the room (excluding the uploader itself)
+    let cleanRecipientIds: string[] = [];
+    if (recipientDeviceIds && recipientDeviceIds.length > 0) {
+      const validDeviceIds = new Set(room.devices.map((d) => d.deviceId));
+      cleanRecipientIds = Array.from(
+        new Set(
+          recipientDeviceIds.filter(
+            (id) => validDeviceIds.has(id) && id !== targetFile.uploadedByDeviceId
+          )
+        )
+      );
+    }
+
+    targetFile.recipientDeviceIds = cleanRecipientIds;
+    room.files[fileIndex] = targetFile;
+    room.lastActivityAt = now;
+    await room.save();
+
+    logger.info(
+      {
+        roomId: room.roomId,
+        roomCode: room.roomCode,
+        fileId,
+        callerDeviceId,
+        recipientsCount: cleanRecipientIds.length,
+      },
+      "File recipients updated"
+    );
+
+    // Broadcast updated file recipients to all participants in real time via Socket.IO
+    await broadcastFileRecipientsUpdated(room.roomCode, targetFile);
+
+    const callerFiles = await syncRoomFiles(room, callerDeviceId);
+
+    return ok(res, {
+      success: true,
+      roomCode: room.roomCode,
+      file: targetFile,
+      files: callerFiles,
     });
   } catch (err) {
     next(err);

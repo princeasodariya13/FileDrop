@@ -27,6 +27,7 @@ export interface IRoomFile {
 export interface IRoom extends Document {
   roomId: string;
   roomCode: string;
+  roomName: string;
   hostDeviceId: string;
   creatorIpHash?: string;
   status: RoomStatus;
@@ -74,6 +75,7 @@ const RoomSchema = new Schema<IRoom>(
   {
     roomId: { type: String, required: true, unique: true, index: true },
     roomCode: { type: String, required: true, unique: true, index: true },
+    roomName: { type: String, default: "Live Room", maxlength: 60 },
     hostDeviceId: { type: String, required: true },
     creatorIpHash: { type: String, index: true },
     status: {

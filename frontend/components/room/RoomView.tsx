@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { RoomState, RoomFile, RoomDevice } from "@/types/room";
+import { RoomState, RoomFile, RoomDevice, RoomSummary } from "@/types/room";
 import { DeviceBadge } from "./DeviceBadge";
+import { ActiveRoomsSelector } from "./ActiveRoomsSelector";
 import { Button } from "@/components/ui/Button";
 import { QRCodeModal } from "@/components/ui/QRCodeModal";
 import { formatBytes, formatTimestamp } from "@/utils/format";
@@ -17,30 +18,42 @@ interface PendingFileItem {
 
 interface RoomViewProps {
   room: RoomState;
+  activeRooms?: RoomSummary[];
+  currentRoomCode?: string | null;
   currentDeviceId: string | null;
   isHost?: boolean;
   isConnected: boolean;
   isUploading: boolean;
   uploadProgress: number;
   uploadingFileName?: string | null;
+  onSwitchRoom?: (roomCode: string) => Promise<void>;
+  onCreateRoom?: (customDeviceName?: string, customRoomName?: string) => Promise<string>;
+  onJoinRoom?: (roomCode: string, customDeviceName?: string) => Promise<string>;
   onUploadFile: (file: File, recipientDeviceIds?: string[]) => Promise<void>;
   onDownloadFile: (fileId: string, fileName: string) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
+  onUpdateRecipients?: (fileId: string, recipientDeviceIds: string[]) => Promise<void>;
   onRemoveDevice?: (deviceId: string) => Promise<void>;
   onLeaveRoom: () => void;
 }
 
 export function RoomView({
   room,
+  activeRooms,
+  currentRoomCode,
   currentDeviceId,
   isHost,
   isConnected,
   isUploading,
   uploadProgress,
   uploadingFileName,
+  onSwitchRoom,
+  onCreateRoom,
+  onJoinRoom,
   onUploadFile,
   onDownloadFile,
   onDeleteFile,
+  onUpdateRecipients,
   onRemoveDevice,
   onLeaveRoom,
 }: RoomViewProps) {
@@ -61,6 +74,11 @@ export function RoomView({
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [fileToDelete, setFileToDelete] = useState<RoomFile | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  // Edit file recipients state
+  const [fileToEditRecipients, setFileToEditRecipients] = useState<RoomFile | null>(null);
+  const [editRecipientIds, setEditRecipientIds] = useState<string[]>([]);
+  const [isSavingRecipients, setIsSavingRecipients] = useState<boolean>(false);
 
   // Device removal state
   const [deviceToRemove, setDeviceToRemove] = useState<{ deviceId: string; deviceName: string } | null>(null);
@@ -254,6 +272,29 @@ export function RoomView({
     }
   };
 
+  const handleToggleEditRecipient = (targetDeviceId: string) => {
+    setEditRecipientIds((prev) => {
+      if (prev.includes(targetDeviceId)) {
+        return prev.filter((id) => id !== targetDeviceId);
+      } else {
+        return [...prev, targetDeviceId];
+      }
+    });
+  };
+
+  const handleSaveRecipients = async () => {
+    if (!fileToEditRecipients || !onUpdateRecipients) return;
+    setIsSavingRecipients(true);
+    try {
+      await onUpdateRecipients(fileToEditRecipients.fileId, editRecipientIds);
+      setFileToEditRecipients(null);
+    } catch (err) {
+      // Error toast is handled in hook
+    } finally {
+      setIsSavingRecipients(false);
+    }
+  };
+
   const confirmRemoveDevice = async () => {
     if (!deviceToRemove || !onRemoveDevice) return;
     setIsRemovingDevice(true);
@@ -357,11 +398,22 @@ export function RoomView({
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
+      {/* Active Rooms Switcher & Manager Bar */}
+      {activeRooms && activeRooms.length > 0 && onSwitchRoom && onCreateRoom && onJoinRoom && (
+        <ActiveRoomsSelector
+          activeRooms={activeRooms}
+          currentRoomCode={currentRoomCode || room.roomCode}
+          onSwitchRoom={onSwitchRoom}
+          onCreateRoom={onCreateRoom}
+          onJoinRoom={onJoinRoom}
+        />
+      )}
+
       {/* Room Header Card */}
       <div className="rounded-card p-6 border border-brand-500/20 bg-surface/80 backdrop-blur-xl shadow-xl space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-surface pb-5">
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <span
                 className={`inline-flex h-2.5 w-2.5 rounded-full ${
@@ -372,42 +424,47 @@ export function RoomView({
                 {isConnected ? "Live Room Active" : "Connecting..."}
               </span>
             </div>
-            <div className="flex items-center gap-3">
-              <h2 className="text-3xl font-extrabold font-heading text-ink-50 tracking-wider">
-                {room.roomCode}
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-2xl sm:text-3xl font-extrabold font-heading text-ink-50">
+                {room.roomName || "Live Room"}
               </h2>
-              <button
-                type="button"
-                onClick={copyCode}
-                className="p-1.5 rounded-lg bg-surface hover:bg-surface-hover border border-surface-hover text-ink-300 hover:text-ink-50 transition-colors"
-                title="Copy Room Code"
-              >
-                {copiedCode ? (
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    className="text-emerald-400"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : (
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
-                )}
-              </button>
+
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 font-mono font-bold text-sm tracking-wider">
+                <span>#{room.roomCode}</span>
+                <button
+                  type="button"
+                  onClick={copyCode}
+                  className="p-1 rounded-md hover:bg-brand-500/20 text-brand-400 hover:text-brand-300 transition-colors ml-1"
+                  title="Copy Room Code"
+                >
+                  {copiedCode ? (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      className="text-emerald-400"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -889,6 +946,34 @@ export function RoomView({
                             {isDownloading ? "Downloading..." : "Download"}
                           </Button>
 
+                          {/* Edit Recipients button: uploader or host can modify sharing permissions */}
+                          {canDelete && onUpdateRecipients && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFileToEditRecipients(file);
+                                setEditRecipientIds(file.recipientDeviceIds || []);
+                              }}
+                              className="p-2 rounded-xl text-ink-400 hover:text-brand-400 hover:bg-brand-500/10 transition-colors"
+                              title="Edit recipients for this file"
+                            >
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                <circle cx="8.5" cy="7" r="4" />
+                                <polyline points="17 11 19 13 23 9" />
+                              </svg>
+                            </button>
+                          )}
+
                           {/* Delete button: strictly only rendered for files uploaded by this device */}
                           {canDelete && (
                             <button
@@ -924,6 +1009,154 @@ export function RoomView({
           </div>
         )}
       </div>
+
+      {/* Edit Recipients Modal */}
+      {mounted && typeof document !== "undefined" && fileToEditRecipients && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md rounded-3xl modal-card p-6 shadow-2xl space-y-5 animate-scale-up">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-1 border-b border-surface-hover">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-500/10 border border-brand-500/20 text-brand-400">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="8.5" cy="7" r="4" />
+                    <polyline points="17 11 19 13 23 9" />
+                  </svg>
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold font-heading modal-title">
+                    Edit File Recipients
+                  </h3>
+                  <p className="text-xs modal-sub truncate max-w-[240px]" title={fileToEditRecipients.fileName}>
+                    {fileToEditRecipients.fileName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFileToEditRecipients(null)}
+                className="p-1.5 rounded-xl text-ink-400 hover:text-ink-50 hover:bg-surface-hover transition-colors"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="text-xs modal-body leading-relaxed">
+              Select which devices can view and download this file. Changes apply immediately in real-time.
+            </p>
+
+            {/* Recipient Options */}
+            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+              {/* Option 1: All Connected Devices */}
+              <div
+                onClick={() => setEditRecipientIds([])}
+                className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
+                  editRecipientIds.length === 0
+                    ? "bg-brand-500/10 border-brand-500/40 shadow-xs"
+                    : "bg-surface/50 border-surface-hover hover:border-brand-500/20"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`h-4 w-4 rounded-full border flex items-center justify-center transition-all ${
+                    editRecipientIds.length === 0
+                      ? "border-brand-500 bg-brand-500 text-white"
+                      : "border-ink-400"
+                  }`}>
+                    {editRecipientIds.length === 0 && (
+                      <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-ink-50">All Connected Devices</p>
+                    <p className="text-[10px] text-ink-400">Any device in this room can view &amp; download</p>
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-500/20 text-brand-400 border border-brand-500/30">
+                  Public in room
+                </span>
+              </div>
+
+              {/* Option 2: Specific Peer Devices */}
+              {peerDevices.length === 0 ? (
+                <div className="p-3 text-center rounded-2xl bg-surface border border-surface-hover">
+                  <p className="text-xs text-ink-400">No other devices connected yet.</p>
+                </div>
+              ) : (
+                peerDevices.map((peer) => {
+                  const isChecked = editRecipientIds.includes(peer.deviceId);
+                  return (
+                    <div
+                      key={peer.deviceId}
+                      onClick={() => handleToggleEditRecipient(peer.deviceId)}
+                      className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
+                        isChecked
+                          ? "bg-brand-500/10 border-brand-500/40 shadow-xs"
+                          : "bg-surface/50 border-surface-hover hover:border-brand-500/20"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}} // Handled by container onClick
+                          className="h-4 w-4 rounded border-ink-400 text-brand-500 focus:ring-brand-500 pointer-events-none"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-ink-50 truncate">
+                            {peer.deviceName}
+                          </p>
+                          <p className="text-[10px] text-ink-400 capitalize font-mono">
+                            {peer.deviceType} • Online
+                          </p>
+                        </div>
+                      </div>
+                      {peer.isHost && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 ml-2">
+                          Host
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-hover">
+              <button
+                type="button"
+                disabled={isSavingRecipients}
+                onClick={() => setFileToEditRecipients(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingRecipients}
+                onClick={handleSaveRecipients}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-md shadow-brand-500/20 transition-all"
+              >
+                {isSavingRecipients ? "Saving..." : "Save Recipients"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Delete Confirmation Modal */}
       {mounted && typeof document !== "undefined" && fileToDelete && createPortal(

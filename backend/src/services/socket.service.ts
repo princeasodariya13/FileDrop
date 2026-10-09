@@ -260,6 +260,30 @@ export async function broadcastFileShared(roomCode: string, file: IRoomFile): Pr
 }
 
 /**
+ * Broadcasts updated recipients for a room file so peers get real-time additions/removals.
+ */
+export async function broadcastFileRecipientsUpdated(roomCode: string, file: IRoomFile): Promise<void> {
+  if (!io) return;
+  const roomChannel = `room:${roomCode}`;
+  const payload = {
+    fileId: file.fileId,
+    fileName: file.fileName,
+    sizeBytes: file.sizeBytes,
+    mimeType: file.mimeType,
+    uploadedByDeviceId: file.uploadedByDeviceId,
+    uploadedByDeviceName: file.uploadedByDeviceName,
+    recipientDeviceIds: file.recipientDeviceIds || [],
+    createdAt: file.createdAt,
+  };
+
+  io.to(roomChannel).emit("file_recipients_updated", payload);
+  logger.info(
+    { roomCode, fileId: file.fileId, recipientsCount: (file.recipientDeviceIds || []).length },
+    "Broadcasted file_recipients_updated event to room"
+  );
+}
+
+/**
  * Broadcasts file deletion to all authorized participants in the room.
  */
 export function broadcastFileDeleted(roomCode: string, fileId: string): void {

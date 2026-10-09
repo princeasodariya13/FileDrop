@@ -23,6 +23,7 @@ export interface RoomFile {
 export interface RoomState {
   roomCode: string;
   roomId: string;
+  roomName?: string;
   status: "active" | "expired" | "closed";
   expiresAt: string;
   lastActivityAt: string;
@@ -30,9 +31,23 @@ export interface RoomState {
   files: RoomFile[];
 }
 
+export interface RoomSummary {
+  roomCode: string;
+  roomId: string;
+  roomName: string;
+  isHost: boolean;
+  deviceId: string;
+  participantCount?: number;
+  filesCount?: number;
+  status: "active" | "expired" | "closed";
+  expiresAt?: string;
+  lastActivityAt?: string;
+}
+
 export interface CreateRoomResponse {
   roomCode: string;
   roomId: string;
+  roomName?: string;
   deviceId: string;
   deviceToken: string;
   expiresAt: string;
@@ -44,6 +59,7 @@ export interface CreateRoomResponse {
 export interface JoinRoomResponse {
   roomCode: string;
   roomId: string;
+  roomName?: string;
   deviceId: string;
   deviceToken: string;
   isHost: boolean;

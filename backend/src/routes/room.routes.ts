@@ -6,6 +6,7 @@ import {
   getRoomState,
   getRoomFiles,
   addFileToRoom,
+  updateRoomFileRecipients,
   deleteRoomFile,
   removeRoomDevice,
   downloadRoomFile,
@@ -26,11 +27,13 @@ router.post("/join", roomCodeGuessLimiter, joinRoom);
 
 // Cross-browser active room auto-lookup
 router.get("/active/lookup", getActiveRoomForClient);
+router.get("/active-client", getActiveRoomForClient);
 
 // Room State & File Operations
 router.get("/:code", roomCodeGuessLimiter, getRoomState);
 router.get("/:code/files", roomCodeGuessLimiter, getRoomFiles);
 router.post("/:code/files", addFileToRoom);
+router.patch("/:code/files/:fileId/recipients", updateRoomFileRecipients);
 router.delete("/:code/files/:fileId", deleteRoomFile);
 router.delete("/:code/devices/:deviceId", removeRoomDevice);
 router.post("/:code/files/:fileId/download", downloadUrlLimiter, downloadRoomFile);

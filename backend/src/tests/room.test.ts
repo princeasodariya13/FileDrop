@@ -1289,5 +1289,347 @@ describe("Connect Devices Room Endpoints & Foundation", () => {
       expect(roomDlJson.data.downloadUrl).toBeDefined();
     });
   });
+
+  describe("Multiple Independent Rooms & Complete Room Isolation", () => {
+    it("allows creating multiple independent rooms with custom room names under the same device", async () => {
+      // 1. Create Room 1: "Company Team"
+      const res1 = await fetch(`${baseUrl}/api/rooms/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceName: "Office Desktop",
+          deviceType: "desktop",
+          roomName: "Company Team",
+        }),
+      });
+      const json1 = (await res1.json()) as any;
+      expect(res1.status).toBe(200);
+      expect(json1.success).toBe(true);
+      expect(json1.data.roomName).toBe("Company Team");
+      expect(json1.data.roomCode).toBeDefined();
+
+      // 2. Create Room 2: "Friends" without leaving or closing Room 1
+      const res2 = await fetch(`${baseUrl}/api/rooms/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceName: "Office Desktop",
+          deviceType: "desktop",
+          roomName: "Friends",
+        }),
+      });
+      const json2 = (await res2.json()) as any;
+      expect(res2.status).toBe(200);
+      expect(json2.success).toBe(true);
+      expect(json2.data.roomName).toBe("Friends");
+      expect(json2.data.roomCode).not.toBe(json1.data.roomCode);
+
+      // 3. Verify both rooms exist independently in the database
+      const room1InDb = await RoomModel.findOne({ roomCode: json1.data.roomCode });
+      const room2InDb = await RoomModel.findOne({ roomCode: json2.data.roomCode });
+      expect(room1InDb?.status).toBe("active");
+      expect(room1InDb?.roomName).toBe("Company Team");
+      expect(room2InDb?.status).toBe("active");
+      expect(room2InDb?.roomName).toBe("Friends");
+    });
+
+    it("ensures files in Room A never appear in Room B or allow cross-room downloads", async () => {
+      // 1. Host creates Room A ("Company") and Room B ("Friends")
+      const rA = await (
+        await fetch(`${baseUrl}/api/rooms/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceName: "Host Dev", roomName: "Company" }),
+        })
+      ).json() as any;
+
+      const rB = await (
+        await fetch(`${baseUrl}/api/rooms/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceName: "Host Dev", roomName: "Friends" }),
+        })
+      ).json() as any;
+
+      // 2. Peer joins both rooms
+      const peerA = await (
+        await fetch(`${baseUrl}/api/rooms/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: rA.data.roomCode, deviceName: "Peer Alice" }),
+        })
+      ).json() as any;
+
+      const peerB = await (
+        await fetch(`${baseUrl}/api/rooms/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: rB.data.roomCode, deviceName: "Peer Alice" }),
+        })
+      ).json() as any;
+
+      // 3. Upload File 1 to Room A
+      const f1 = await FileModel.create({
+        fileId: "company-secret-pdf",
+        code: "112233",
+        originalName: "financials.pdf",
+        sanitizedName: "financials.pdf",
+        sizeBytes: 4096,
+        mimeType: "application/pdf",
+        storageKey: "files/company-secret-pdf/financials.pdf",
+        possessionToken: "f1-possession-token",
+        status: "active",
+        expiresAt: new Date(Date.now() + 3600000),
+        inactivityTimerStartsAt: new Date(),
+      });
+
+      await fetch(`${baseUrl}/api/rooms/${rA.data.roomCode}/files`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": rA.data.deviceId,
+          "x-device-token": rA.data.deviceToken,
+        },
+        body: JSON.stringify({
+          fileId: f1.fileId,
+          possessionToken: f1.possessionToken,
+        }),
+      });
+
+      // 4. Upload File 2 to Room B
+      const f2 = await FileModel.create({
+        fileId: "friends-party-jpg",
+        code: "445566",
+        originalName: "party.jpg",
+        sanitizedName: "party.jpg",
+        sizeBytes: 2048,
+        mimeType: "image/jpeg",
+        storageKey: "files/friends-party-jpg/party.jpg",
+        possessionToken: "f2-possession-token",
+        status: "active",
+        expiresAt: new Date(Date.now() + 3600000),
+        inactivityTimerStartsAt: new Date(),
+      });
+
+      await fetch(`${baseUrl}/api/rooms/${rB.data.roomCode}/files`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": rB.data.deviceId,
+          "x-device-token": rB.data.deviceToken,
+        },
+        body: JSON.stringify({
+          fileId: f2.fileId,
+          possessionToken: f2.possessionToken,
+        }),
+      });
+
+      // 5. Query Room A state for Peer A: must contain financials.pdf and NEVER party.jpg
+      const stateARes = await fetch(`${baseUrl}/api/rooms/${rA.data.roomCode}`, {
+        headers: {
+          "x-device-id": peerA.data.deviceId,
+          "x-device-token": peerA.data.deviceToken,
+        },
+      });
+      const stateA = (await stateARes.json()) as any;
+      expect(stateA.data.files.length).toBe(1);
+      expect(stateA.data.files[0].fileId).toBe("company-secret-pdf");
+      expect(stateA.data.files.find((f: any) => f.fileId === "friends-party-jpg")).toBeUndefined();
+
+      // 6. Query Room B state for Peer B: must contain party.jpg and NEVER financials.pdf
+      const stateBRes = await fetch(`${baseUrl}/api/rooms/${rB.data.roomCode}`, {
+        headers: {
+          "x-device-id": peerB.data.deviceId,
+          "x-device-token": peerB.data.deviceToken,
+        },
+      });
+      const stateB = (await stateBRes.json()) as any;
+      expect(stateB.data.files.length).toBe(1);
+      expect(stateB.data.files[0].fileId).toBe("friends-party-jpg");
+      expect(stateB.data.files.find((f: any) => f.fileId === "company-secret-pdf")).toBeUndefined();
+
+      // 7. Attempting to download Room A's file using Room B's session must be forbidden / unauthorized
+      const crossDlRes = await fetch(
+        `${baseUrl}/api/rooms/${rA.data.roomCode}/files/${f1.fileId}/download`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-device-id": peerB.data.deviceId, // Room B's device ID
+            "x-device-token": peerB.data.deviceToken,
+          },
+        }
+      );
+      expect([401, 403]).toContain(crossDlRes.status);
+    });
+
+    it("removing a device from Room A does not revoke its membership in Room B", async () => {
+      // 1. Host creates Room A and Room B
+      const rA = await (
+        await fetch(`${baseUrl}/api/rooms/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceName: "Host", roomName: "Room A" }),
+        })
+      ).json() as any;
+
+      const rB = await (
+        await fetch(`${baseUrl}/api/rooms/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceName: "Host", roomName: "Room B" }),
+        })
+      ).json() as any;
+
+      // 2. Alice joins Room A and Room B
+      const aliceA = await (
+        await fetch(`${baseUrl}/api/rooms/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: rA.data.roomCode, deviceName: "Alice" }),
+        })
+      ).json() as any;
+
+      const aliceB = await (
+        await fetch(`${baseUrl}/api/rooms/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: rB.data.roomCode, deviceName: "Alice" }),
+        })
+      ).json() as any;
+
+      // 3. Host removes Alice from Room A
+      const removeRes = await fetch(
+        `${baseUrl}/api/rooms/${rA.data.roomCode}/devices/${aliceA.data.deviceId}`,
+        {
+          method: "DELETE",
+          headers: {
+            "x-device-id": rA.data.deviceId,
+            "x-device-token": rA.data.deviceToken,
+          },
+        }
+      );
+      expect(removeRes.status).toBe(200);
+
+      // 4. Alice is removed from Room A devices list
+      const checkARes = await fetch(`${baseUrl}/api/rooms/${rA.data.roomCode}`);
+      const checkA = (await checkARes.json()) as any;
+      expect(checkA.data.devices.find((d: any) => d.deviceId === aliceA.data.deviceId)).toBeUndefined();
+
+      // Alice cannot perform authenticated actions in Room A (e.g. upload / attach file)
+      const fRemoved = await FileModel.create({
+        fileId: "unauth-attempt-file",
+        code: "778899",
+        originalName: "unauth.pdf",
+        sanitizedName: "unauth.pdf",
+        sizeBytes: 1024,
+        mimeType: "application/pdf",
+        storageKey: "files/unauth-attempt-file/unauth.pdf",
+        possessionToken: "unauth-possession-token",
+        status: "active",
+        expiresAt: new Date(Date.now() + 3600000),
+        inactivityTimerStartsAt: new Date(),
+      });
+
+      const unauthUploadRes = await fetch(`${baseUrl}/api/rooms/${rA.data.roomCode}/files`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": aliceA.data.deviceId,
+          "x-device-token": aliceA.data.deviceToken,
+        },
+        body: JSON.stringify({
+          fileId: fRemoved.fileId,
+          possessionToken: fRemoved.possessionToken,
+        }),
+      });
+      expect([401, 403]).toContain(unauthUploadRes.status);
+
+      // 5. Alice STILL HAS full access to Room B
+      const checkBRes = await fetch(`${baseUrl}/api/rooms/${rB.data.roomCode}`, {
+        headers: {
+          "x-device-id": aliceB.data.deviceId,
+          "x-device-token": aliceB.data.deviceToken,
+        },
+      });
+      expect(checkBRes.status).toBe(200);
+      const checkB = (await checkBRes.json()) as any;
+      expect(checkB.success).toBe(true);
+      expect(checkB.data.roomName).toBe("Room B");
+      expect(checkB.data.devices.find((d: any) => d.deviceId === aliceB.data.deviceId)).toBeDefined();
+    });
+
+    it("leaving Room A does not close Room B or remove its files", async () => {
+      // 1. Host creates Room A and Room B
+      const rA = await (
+        await fetch(`${baseUrl}/api/rooms/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceName: "Host", roomName: "Company" }),
+        })
+      ).json() as any;
+
+      const rB = await (
+        await fetch(`${baseUrl}/api/rooms/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceName: "Host", roomName: "Friends" }),
+        })
+      ).json() as any;
+
+      // 2. Host leaves Room A
+      const leaveRes = await fetch(`${baseUrl}/api/rooms/${rA.data.roomCode}/leave`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": rA.data.deviceId,
+          "x-device-token": rA.data.deviceToken,
+        },
+        body: JSON.stringify({ deviceId: rA.data.deviceId }),
+      });
+      expect(leaveRes.status).toBe(200);
+
+      // 3. Room A is closed
+      const rAInDb = await RoomModel.findOne({ roomCode: rA.data.roomCode });
+      expect(rAInDb?.status).toBe("closed");
+
+      // 4. Room B is completely active and unharmed
+      const rBInDb = await RoomModel.findOne({ roomCode: rB.data.roomCode });
+      expect(rBInDb?.status).toBe("active");
+      expect(rBInDb?.devices.length).toBe(1);
+    });
+
+    it("GET /api/rooms/active-client returns all active rooms for the calling client IP", async () => {
+      // 1. Create two rooms from this client
+      const r1 = await (
+        await fetch(`${baseUrl}/api/rooms/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceName: "Dev 1", roomName: "Office Room" }),
+        })
+      ).json() as any;
+
+      const r2 = await (
+        await fetch(`${baseUrl}/api/rooms/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceName: "Dev 2", roomName: "Family Room" }),
+        })
+      ).json() as any;
+
+      // 2. Fetch active rooms
+      const activeRes = await fetch(`${baseUrl}/api/rooms/active-client`);
+      expect(activeRes.status).toBe(200);
+      const activeJson = (await activeRes.json()) as any;
+      expect(activeJson.success).toBe(true);
+      expect(Array.isArray(activeJson.data.activeRooms)).toBe(true);
+      expect(activeJson.data.activeRooms.length).toBeGreaterThanOrEqual(2);
+
+      const codes = activeJson.data.activeRooms.map((r: any) => r.roomCode);
+      expect(codes).toContain(r1.data.roomCode);
+      expect(codes).toContain(r2.data.roomCode);
+    });
+  });
 });
+
 

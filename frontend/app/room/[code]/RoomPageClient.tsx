@@ -17,6 +17,8 @@ interface RoomPageClientProps {
 function RoomContent({ code }: RoomPageClientProps) {
   const {
     room,
+    activeRooms,
+    currentRoomCode,
     deviceId,
     isHost,
     isConnected,
@@ -25,10 +27,13 @@ function RoomContent({ code }: RoomPageClientProps) {
     uploadProgress,
     uploadingFileName,
     error,
+    createRoom,
     joinRoom,
+    switchRoom,
     uploadFileToRoom,
     uploadFilesToRoom,
     downloadFile,
+    updateFileRecipients,
     deleteFileFromRoom,
     removeDeviceFromRoom,
     leaveRoom,
@@ -89,15 +94,21 @@ function RoomContent({ code }: RoomPageClientProps) {
     return (
       <RoomView
         room={room}
+        activeRooms={activeRooms}
+        currentRoomCode={currentRoomCode}
         currentDeviceId={deviceId}
         isHost={isHost}
         isConnected={isConnected}
         isUploading={isUploading}
         uploadProgress={uploadProgress}
         uploadingFileName={uploadingFileName}
+        onSwitchRoom={switchRoom}
+        onCreateRoom={createRoom}
+        onJoinRoom={joinRoom}
         onUploadFile={uploadFileToRoom}
         onDownloadFile={downloadFile}
         onDeleteFile={deleteFileFromRoom}
+        onUpdateRecipients={updateFileRecipients}
         onRemoveDevice={removeDeviceFromRoom}
         onLeaveRoom={leaveRoom}
       />

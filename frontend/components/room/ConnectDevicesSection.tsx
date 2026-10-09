@@ -10,6 +10,8 @@ import { getDeviceDefaults } from "@/utils/device";
 export function ConnectDevicesSection() {
   const {
     room,
+    activeRooms,
+    currentRoomCode,
     deviceId,
     isConnected,
     isHost,
@@ -18,17 +20,20 @@ export function ConnectDevicesSection() {
     uploadProgress,
     uploadingFileName,
     error,
+    switchRoom,
     createRoom,
     joinRoom,
     uploadFileToRoom,
     uploadFilesToRoom,
     downloadFile,
+    updateFileRecipients,
     deleteFileFromRoom,
     removeDeviceFromRoom,
     leaveRoom,
   } = useConnectRoom();
 
   const [inputCode, setInputCode] = useState<string>("");
+  const [roomName, setRoomName] = useState<string>("");
   const [deviceName, setDeviceName] = useState<string>(() => getDeviceDefaults().deviceName);
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
 
@@ -36,15 +41,21 @@ export function ConnectDevicesSection() {
     return (
       <RoomView
         room={room}
+        activeRooms={activeRooms}
+        currentRoomCode={currentRoomCode}
         currentDeviceId={deviceId}
         isHost={isHost}
         isConnected={isConnected}
         isUploading={isUploading}
         uploadProgress={uploadProgress}
         uploadingFileName={uploadingFileName}
+        onSwitchRoom={switchRoom}
+        onCreateRoom={createRoom}
+        onJoinRoom={joinRoom}
         onUploadFile={uploadFileToRoom}
         onDownloadFile={downloadFile}
         onDeleteFile={deleteFileFromRoom}
+        onUpdateRecipients={updateFileRecipients}
         onRemoveDevice={removeDeviceFromRoom}
         onLeaveRoom={leaveRoom}
       />
@@ -103,13 +114,24 @@ export function ConnectDevicesSection() {
                 Generate a temporary 6-digit room code and QR to connect nearby devices.
               </p>
             </div>
-            <Button
-              className="w-full"
-              disabled={isConnecting}
-              onClick={() => createRoom(deviceName)}
-            >
-              {isConnecting ? "Creating Room..." : "Create Room"}
-            </Button>
+
+            <div className="space-y-2">
+              <input
+                type="text"
+                maxLength={50}
+                value={roomName}
+                onChange={(e) => setRoomName(e.target.value)}
+                placeholder="Room Name (e.g. Company Team, Friends)"
+                className="w-full rounded-xl bg-surface border border-surface-hover px-3.5 py-2 text-xs text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
+              />
+              <Button
+                className="w-full"
+                disabled={isConnecting}
+                onClick={() => createRoom(deviceName, roomName || "Live Room")}
+              >
+                {isConnecting ? "Creating Room..." : "Create Room"}
+              </Button>
+            </div>
           </div>
 
           {/* Card 2: Join Room */}

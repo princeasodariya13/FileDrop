@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const createRoomSchema = z.object({
+  roomName: z.string().trim().min(1).max(60).optional(),
   deviceName: z.string().trim().min(1).max(50).optional(),
   deviceType: z.enum(["desktop", "mobile", "tablet", "unknown"]).optional(),
 });
@@ -22,6 +23,12 @@ export const addRoomFileSchema = z.object({
 });
 
 export type AddRoomFileInput = z.infer<typeof addRoomFileSchema>;
+
+export const updateRoomFileRecipientsSchema = z.object({
+  recipientDeviceIds: z.array(z.string().trim()).optional().default([]),
+});
+
+export type UpdateRoomFileRecipientsInput = z.infer<typeof updateRoomFileRecipientsSchema>;
 
 export const leaveRoomSchema = z.object({
   deviceId: z.string().trim().min(1).max(100).optional(),
