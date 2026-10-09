@@ -1,16 +1,22 @@
+import http from "http";
 import mongoose from "mongoose";
 import { createApp } from "@/app";
 import { env } from "@/config/env";
 import { logger } from "@/utils/logger";
 import { scheduleCleanupJob } from "@/jobs/cleanup.job";
+import { initSocketServer, closeSocketServer } from "@/services/socket.service";
 
 async function main() {
   await mongoose.connect(env.mongoUri);
   logger.info("Connected to MongoDB");
 
   const app = createApp();
+  const server = http.createServer(app);
 
-  const server = app.listen(env.port, "0.0.0.0", () => {
+  // Initialize Socket.IO real-time communication layer
+  initSocketServer(server);
+
+  server.listen(env.port, "0.0.0.0", () => {
     logger.info(`Server running on port ${env.port} (${env.nodeEnv})`);
   });
 
@@ -23,12 +29,14 @@ async function main() {
   const shutdown = async (signal: string) => {
     logger.info(`Received ${signal}. Shutting down gracefully...`);
     if (cleanupTask) cleanupTask.stop();
+    closeSocketServer();
     server.close(async () => {
       logger.info("HTTP server closed.");
       await mongoose.connection.close();
       logger.info("MongoDB connection closed.");
       process.exit(0);
     });
+
     // Force shutdown if taking too long
     setTimeout(() => {
       logger.error("Could not close connections in time, forcefully shutting down");

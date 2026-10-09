@@ -11,6 +11,7 @@ import uploadRoutes from "@/routes/upload.routes";
 import fileRoutes from "@/routes/file.routes";
 import storageRoutes from "@/routes/storage.routes";
 import cronRoutes from "@/routes/cron.routes";
+import roomRoutes from "@/routes/room.routes";
 
 export function createApp() {
   const app = express();
@@ -46,6 +47,8 @@ export function createApp() {
   app.use("/api/files", fileRoutes);
   app.use("/api/storage", storageRoutes);
   app.use("/api/cron", cronRoutes);
+  app.use("/api/rooms", roomRoutes);
+
 
   app.use(notFoundHandler);
   app.use(errorHandler);

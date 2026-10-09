@@ -101,16 +101,24 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
           return;
         }
 
-        // 2. Full URL containing /file/
+        // 2. Full URL containing /room/ or /file/
         try {
           const urlObj = new URL(trimmed, window.location.origin);
+          if (urlObj.pathname.startsWith("/room/")) {
+            router.push(urlObj.pathname);
+            return;
+          }
           if (urlObj.pathname.startsWith("/file/")) {
             router.push(urlObj.pathname);
             return;
           }
         } catch {}
 
-        // 3. Relative path like /file/123
+        // 3. Relative path like /room/123 or /file/123
+        if (trimmed.startsWith("/room/")) {
+          router.push(trimmed);
+          return;
+        }
         if (trimmed.startsWith("/file/")) {
           router.push(trimmed);
           return;
@@ -123,6 +131,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
           router.push(`/file/${encodeURIComponent(trimmed)}`);
         }
       }, 700);
+
     },
     [playBeep, push, stopCameraStream, onClose, router]
   );

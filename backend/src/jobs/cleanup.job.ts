@@ -188,16 +188,27 @@ export async function expireNoAccessFiles(): Promise<number> {
   return count;
 }
 
+export async function sweepExpiredRooms(): Promise<number> {
+  const { RoomModel } = await import("@/models/Room.model");
+  const now = new Date();
+  const res = await RoomModel.updateMany(
+    { status: "active", expiresAt: { $lte: now } },
+    { $set: { status: "expired" } }
+  );
+  return res.modifiedCount;
+}
+
 /** Runs the full cleanup pass. Safe to call repeatedly/concurrently — every step is idempotent. */
 export async function runCleanupPass(): Promise<void> {
   const staleDown = await sweepStaleDownloadSessions();
-  const [expired, abandoned, reclaimed, noAccess] = await Promise.all([
+  const [expired, abandoned, reclaimed, noAccess, expiredRooms] = await Promise.all([
     expireOverdueFiles(),
     sweepAbandonedSessions(),
     reclaimExpiredReservations(),
     expireNoAccessFiles(),
+    sweepExpiredRooms(),
   ]);
-  logger.info({ expired, abandoned, reclaimed, staleDown, noAccess }, "Cleanup pass complete");
+  logger.info({ expired, abandoned, reclaimed, staleDown, noAccess, expiredRooms }, "Cleanup pass complete");
 }
 
 export function scheduleCleanupJob() {
@@ -208,3 +219,4 @@ export function scheduleCleanupJob() {
   logger.info("Cleanup job scheduled (every 1 minute)");
   return task;
 }
+

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { customAlphabet } from "nanoid";
 
 // Unambiguous, URL-safe alphabet — no 0/O/1/l confusion.
@@ -5,10 +6,18 @@ const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 export const generateFileId = customAlphabet(alphabet, 12);
 export const generateSessionId = customAlphabet(alphabet, 16);
+export const generateRoomId = customAlphabet(alphabet, 12);
+export const generateDeviceId = customAlphabet(alphabet, 16);
+export const generateDeviceToken = customAlphabet(alphabet, 32);
 
 export function generateTransferCode(): string {
   // Generate a random 6-digit number string between 100000 and 999999
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+export function generateSecureRoomCode(): string {
+  // Cryptographically secure 6-digit room code between 100000 and 999999
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 export function getFallbackCode(fileId: string): string {
@@ -29,3 +38,4 @@ export function sanitizeFilename(name: string): string {
 export function buildStorageKey(fileId: string, sanitizedName: string): string {
   return `files/${fileId}/${sanitizedName}`;
 }
+

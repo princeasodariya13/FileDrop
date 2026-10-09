@@ -55,9 +55,32 @@ export const codeLookupLimiter = rateLimit({
   },
 });
 
+export const roomCreateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: "RATE_LIMITED", message: "Too many room creation requests. Please slow down." },
+  },
+});
+
+export const roomCodeGuessLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: "RATE_LIMITED", message: "Too many room attempts. Please try again in a moment." },
+  },
+});
+
 export const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 100,
   standardHeaders: true,
   legacyHeaders: false,
 });
+

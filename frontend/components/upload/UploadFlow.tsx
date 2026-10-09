@@ -14,6 +14,7 @@ import { useMyUploads } from "@/hooks/useMyUploads";
 import { MyUploadsList } from "@/components/upload/MyUploadsList";
 
 import { ReceiveFileSection } from "@/components/receiver/ReceiveFileSection";
+import { ConnectDevicesSection } from "@/components/room/ConnectDevicesSection";
 
 const DEFAULT_OPTIONS: UploadOptions = { expirationSeconds: 3600, downloadLimit: null };
 
@@ -26,7 +27,8 @@ interface ActiveUploadMetadata {
 }
 
 export function UploadFlow() {
-  const [activeTab, setActiveTab] = useState<"send" | "receive">("send");
+  const [activeTab, setActiveTab] = useState<"send" | "receive" | "connect">("send");
+
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [options, setOptions] = useState<UploadOptions>(DEFAULT_OPTIONS);
   const [batchResult, setBatchResult] = useState<CompleteUploadResponse | null>(null);
@@ -213,12 +215,12 @@ export function UploadFlow() {
 
   return (
     <div className="space-y-6">
-      {/* Send / Receive Mode Switcher */}
-      <div className="flex items-center justify-center p-1.5 bg-surface border border-surface-hover rounded-2xl max-w-xs mx-auto shadow-inner">
+      {/* Send / Receive / Connect Mode Switcher */}
+      <div className="flex items-center justify-center p-1.5 bg-surface border border-surface-hover rounded-2xl max-w-md mx-auto shadow-inner gap-1">
         <button
           type="button"
           onClick={() => setActiveTab("send")}
-          className={`flex-1 py-2 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
             activeTab === "send"
               ? "bg-btn-primary text-white shadow-lg shadow-brand-500/30"
               : "text-ink-400 hover:text-ink-50"
@@ -229,7 +231,7 @@ export function UploadFlow() {
         <button
           type="button"
           onClick={() => setActiveTab("receive")}
-          className={`flex-1 py-2 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
             activeTab === "receive"
               ? "bg-btn-primary text-white shadow-lg shadow-brand-500/30"
               : "text-ink-400 hover:text-ink-50"
@@ -237,11 +239,25 @@ export function UploadFlow() {
         >
           Receive Code
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("connect")}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+            activeTab === "connect"
+              ? "bg-btn-primary text-white shadow-lg shadow-brand-500/30"
+              : "text-ink-400 hover:text-ink-50"
+          }`}
+        >
+          Connect Devices
+        </button>
       </div>
 
-      {activeTab === "receive" ? (
+      {activeTab === "connect" ? (
+        <ConnectDevicesSection />
+      ) : activeTab === "receive" ? (
         <ReceiveFileSection />
       ) : (
+
         <div className="space-y-4">
           {unfinishedUpload ? (
             <div className="rounded-card p-6 space-y-4 border border-brand-500/20 bg-brand-500/5 animate-fade-in-scale">
