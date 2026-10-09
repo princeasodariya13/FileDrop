@@ -70,9 +70,9 @@ export function ActiveRoomsSelector({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="space-y-2">
+    <div className={`space-y-2 relative ${isMobileMenuOpen ? "z-50" : "z-20"}`}>
       {/* Active Rooms Bar */}
-      <div className="p-3 sm:p-3.5 rounded-2xl bg-surface/70 border border-surface-hover backdrop-blur-md space-y-2.5">
+      <div className="p-3 sm:p-3.5 rounded-2xl bg-surface/70 border border-surface-hover backdrop-blur-md space-y-2.5 relative">
         {/* Top Header Row: Label & Actions */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -137,7 +137,7 @@ export function ActiveRoomsSelector({
               <span>New</span>
             </button>
 
-            <div className="relative">
+            <div className="relative z-[99999]">
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen((prev) => !prev)}
@@ -154,10 +154,10 @@ export function ActiveRoomsSelector({
               {isMobileMenuOpen && (
                 <>
                   <div
-                    className="fixed inset-0 z-[9990]"
+                    className="fixed inset-0 z-[99990]"
                     onClick={() => setIsMobileMenuOpen(false)}
                   />
-                  <div className="absolute right-0 top-full mt-1.5 w-52 max-w-[calc(100vw-2rem)] rounded-2xl dropdown-card p-1.5 z-[9995] shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
+                  <div className="absolute right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] rounded-2xl dropdown-card p-2 z-[99999] shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
                     <button
                       type="button"
                       onClick={() => {

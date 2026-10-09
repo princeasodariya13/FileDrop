@@ -411,13 +411,15 @@ export function RoomView({
     <div className="space-y-5 animate-fade-in">
       {/* Active Rooms Switcher & Manager Bar */}
       {activeRooms && activeRooms.length > 0 && onSwitchRoom && onCreateRoom && onJoinRoom && (
-        <ActiveRoomsSelector
-          activeRooms={activeRooms}
-          currentRoomCode={currentRoomCode || room.roomCode}
-          onSwitchRoom={onSwitchRoom}
-          onCreateRoom={onCreateRoom}
-          onJoinRoom={onJoinRoom}
-        />
+        <div className="relative z-30">
+          <ActiveRoomsSelector
+            activeRooms={activeRooms}
+            currentRoomCode={currentRoomCode || room.roomCode}
+            onSwitchRoom={onSwitchRoom}
+            onCreateRoom={onCreateRoom}
+            onJoinRoom={onJoinRoom}
+          />
+        </div>
       )}
 
       {/* Room Header Card */}
