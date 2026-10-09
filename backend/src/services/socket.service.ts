@@ -209,27 +209,67 @@ async function handleLeaveRoom(socket: Socket): Promise<void> {
     deviceId: data.deviceId,
     deviceName: data.deviceName,
     leftAt: new Date(),
+    reason: "voluntary_leave",
   });
 
-  socket.data = {};
+  delete (socket.data as any).deviceId;
+  delete (socket.data as any).deviceToken;
+  delete (socket.data as any).roomCode;
 }
 
 /**
- * Broadcasts a newly committed file to all authorized participants in the room.
+ * Broadcasts a newly committed file to authorized participants in the room.
  */
-export function broadcastFileShared(roomCode: string, file: IRoomFile): void {
+export async function broadcastFileShared(roomCode: string, file: IRoomFile): Promise<void> {
   if (!io) return;
   const roomChannel = `room:${roomCode}`;
-  io.to(roomChannel).emit("file_shared", {
+  const payload = {
     fileId: file.fileId,
     fileName: file.fileName,
     sizeBytes: file.sizeBytes,
     mimeType: file.mimeType,
     uploadedByDeviceId: file.uploadedByDeviceId,
     uploadedByDeviceName: file.uploadedByDeviceName,
+    recipientDeviceIds: file.recipientDeviceIds || [],
     createdAt: file.createdAt,
+  };
+
+  // If specific recipients specified -> emit ONLY to uploader and authorized recipient sockets
+  if (file.recipientDeviceIds && file.recipientDeviceIds.length > 0) {
+    const allowedDeviceIds = new Set([file.uploadedByDeviceId, ...file.recipientDeviceIds]);
+    try {
+      const sockets = await io.in(roomChannel).fetchSockets();
+      for (const s of sockets) {
+        const data = s.data as Partial<AuthenticatedSocketData>;
+        if (data.deviceId && allowedDeviceIds.has(data.deviceId)) {
+          s.emit("file_shared", payload);
+        }
+      }
+      logger.info(
+        { roomCode, fileId: file.fileId, recipientsCount: file.recipientDeviceIds.length },
+        "Broadcasted private file_shared event to authorized devices only"
+      );
+    } catch (err) {
+      logger.warn({ err, roomCode, fileId: file.fileId }, "Error broadcasting private file_shared event");
+    }
+  } else {
+    // Room-wide file: broadcast to all participants in channel
+    io.to(roomChannel).emit("file_shared", payload);
+    logger.info({ roomCode, fileId: file.fileId }, "Broadcasted file_shared event to room");
+  }
+}
+
+/**
+ * Broadcasts file deletion to all authorized participants in the room.
+ */
+export function broadcastFileDeleted(roomCode: string, fileId: string): void {
+  if (!io) return;
+  const roomChannel = `room:${roomCode}`;
+  io.to(roomChannel).emit("file_deleted", {
+    roomCode,
+    fileId,
   });
-  logger.info({ roomCode, fileId: file.fileId }, "Broadcasted file_shared event to room");
+  logger.info({ roomCode, fileId }, "Broadcasted file_deleted event to room");
 }
 
 /**
@@ -245,6 +285,120 @@ export function broadcastDevicesUpdated(
     roomCode,
     devices,
   });
+}
+
+/**
+ * Disconnects a removed device immediately from the Socket.IO server,
+ * notifies that device with a device_removed message, and updates the room.
+ */
+export async function handleDeviceRemoved(
+  roomCode: string,
+  targetDeviceId: string,
+  targetDeviceName: string,
+  updatedDevices: Array<Omit<IRoomDevice, "deviceToken">>
+): Promise<void> {
+  if (!io) return;
+  const roomChannel = `room:${roomCode}`;
+
+  // 1. Find all sockets associated with target device in this room
+  try {
+    const sockets = await io.in(roomChannel).fetchSockets();
+    for (const s of sockets) {
+      const data = s.data as Partial<AuthenticatedSocketData>;
+      if (data.deviceId === targetDeviceId) {
+        s.emit("device_removed", {
+          roomCode,
+          deviceId: targetDeviceId,
+          message: "The host removed your device from this room.",
+        });
+        s.leave(roomChannel);
+        delete (s.data as any).deviceId;
+        delete (s.data as any).deviceToken;
+        delete (s.data as any).roomCode;
+        s.disconnect(true);
+        logger.info(
+          { socketId: s.id, roomCode, deviceId: targetDeviceId },
+          "Disconnected removed device socket"
+        );
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, roomCode, targetDeviceId }, "Error fetching sockets for removed device");
+  }
+
+  // 2. Broadcast to all remaining peers in the room
+  io.to(roomChannel).emit("peer_left", {
+    deviceId: targetDeviceId,
+    deviceName: targetDeviceName,
+    leftAt: new Date(),
+    reason: "removed_by_host",
+  });
+
+  io.to(roomChannel).emit("devices_updated", {
+    roomCode,
+    devices: updatedDevices,
+  });
+
+  logger.info(
+    { roomCode, targetDeviceId },
+    "Broadcasted device removal and updated peers"
+  );
+}
+
+/**
+ * Handles a device leaving a room voluntarily.
+ * Disconnects socket for the departing device, broadcasts peer_left and devices_updated to remaining peers.
+ */
+export async function handleDeviceVoluntaryLeave(
+  roomCode: string,
+  leavingDeviceId: string,
+  leavingDeviceName: string,
+  updatedDevices: Array<Omit<IRoomDevice, "deviceToken">>,
+  isRoomClosed: boolean = false
+): Promise<void> {
+  if (!io) return;
+  const roomChannel = `room:${roomCode}`;
+
+  // 1. Find and disconnect sockets belonging to departing device
+  try {
+    const sockets = await io.in(roomChannel).fetchSockets();
+    for (const s of sockets) {
+      const data = s.data as Partial<AuthenticatedSocketData>;
+      if (data.deviceId === leavingDeviceId) {
+        s.leave(roomChannel);
+        delete (s.data as any).deviceId;
+        delete (s.data as any).deviceToken;
+        delete (s.data as any).roomCode;
+        s.disconnect(true);
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, roomCode, leavingDeviceId }, "Error disconnecting leaving device sockets");
+  }
+
+  // 2. If room closed -> notify room
+  if (isRoomClosed) {
+    io.to(roomChannel).emit("room_closed", {
+      roomCode,
+      reason: "closed",
+    });
+    return;
+  }
+
+  // 3. Broadcast peer_left and devices_updated to remaining room members
+  io.to(roomChannel).emit("peer_left", {
+    deviceId: leavingDeviceId,
+    deviceName: leavingDeviceName,
+    leftAt: new Date(),
+    reason: "voluntary_leave",
+  });
+
+  io.to(roomChannel).emit("devices_updated", {
+    roomCode,
+    devices: updatedDevices,
+  });
+
+  logger.info({ roomCode, leavingDeviceId }, "Broadcasted voluntary departure and updated peers");
 }
 
 /**

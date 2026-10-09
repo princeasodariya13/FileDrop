@@ -12,6 +12,7 @@ export function ConnectDevicesSection() {
     room,
     deviceId,
     isConnected,
+    isHost,
     isConnecting,
     isUploading,
     uploadProgress,
@@ -22,6 +23,8 @@ export function ConnectDevicesSection() {
     uploadFileToRoom,
     uploadFilesToRoom,
     downloadFile,
+    deleteFileFromRoom,
+    removeDeviceFromRoom,
     leaveRoom,
   } = useConnectRoom();
 
@@ -34,13 +37,15 @@ export function ConnectDevicesSection() {
       <RoomView
         room={room}
         currentDeviceId={deviceId}
+        isHost={isHost}
         isConnected={isConnected}
         isUploading={isUploading}
         uploadProgress={uploadProgress}
         uploadingFileName={uploadingFileName}
         onUploadFile={uploadFileToRoom}
-        onUploadFiles={uploadFilesToRoom}
         onDownloadFile={downloadFile}
+        onDeleteFile={deleteFileFromRoom}
+        onRemoveDevice={removeDeviceFromRoom}
         onLeaveRoom={leaveRoom}
       />
     );

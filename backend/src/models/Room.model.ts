@@ -19,6 +19,7 @@ export interface IRoomFile {
   mimeType: string;
   uploadedByDeviceId: string;
   uploadedByDeviceName: string;
+  recipientDeviceIds?: string[];
   createdAt: Date;
 }
 
@@ -60,6 +61,7 @@ const RoomFileSchema = new Schema<IRoomFile>(
     mimeType: { type: String, required: true, maxlength: 255 },
     uploadedByDeviceId: { type: String, required: true },
     uploadedByDeviceName: { type: String, required: true, maxlength: 50 },
+    recipientDeviceIds: { type: [String], default: [] },
     createdAt: { type: Date, default: Date.now },
   },
   { _id: false }

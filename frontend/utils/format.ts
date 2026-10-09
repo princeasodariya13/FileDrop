@@ -45,3 +45,14 @@ export function formatRelativeExpiry(iso: string, nowMs: number = Date.now()): s
   const days = Math.floor(hours / 24);
   return `in ${days}d`;
 }
+
+export function formatTimestamp(dateValue: string | Date | undefined): string {
+  if (!dateValue) return "";
+  try {
+    const d = new Date(dateValue);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}

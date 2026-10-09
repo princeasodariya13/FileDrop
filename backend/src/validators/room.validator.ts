@@ -18,6 +18,7 @@ export type JoinRoomInput = z.infer<typeof joinRoomSchema>;
 export const addRoomFileSchema = z.object({
   fileId: z.string().trim().min(1).max(100),
   possessionToken: z.string().trim().min(1).max(200).optional(),
+  recipientDeviceIds: z.array(z.string().trim()).optional(),
 });
 
 export type AddRoomFileInput = z.infer<typeof addRoomFileSchema>;

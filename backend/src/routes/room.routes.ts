@@ -5,6 +5,8 @@ import {
   getRoomState,
   getRoomFiles,
   addFileToRoom,
+  deleteRoomFile,
+  removeRoomDevice,
   downloadRoomFile,
   leaveRoom,
 } from "@/controllers/room.controller";
@@ -25,9 +27,10 @@ router.post("/join", roomCodeGuessLimiter, joinRoom);
 router.get("/:code", roomCodeGuessLimiter, getRoomState);
 router.get("/:code/files", roomCodeGuessLimiter, getRoomFiles);
 router.post("/:code/files", addFileToRoom);
+router.delete("/:code/files/:fileId", deleteRoomFile);
+router.delete("/:code/devices/:deviceId", removeRoomDevice);
 router.post("/:code/files/:fileId/download", downloadUrlLimiter, downloadRoomFile);
 router.get("/:code/files/:fileId/download", downloadUrlLimiter, downloadRoomFile);
 router.post("/:code/leave", leaveRoom);
-
 
 export default router;

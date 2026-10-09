@@ -14,6 +14,7 @@ function RoomContent({ code }: RoomPageClientProps) {
   const {
     room,
     deviceId,
+    isHost,
     isConnected,
     isConnecting,
     isUploading,
@@ -24,6 +25,8 @@ function RoomContent({ code }: RoomPageClientProps) {
     uploadFileToRoom,
     uploadFilesToRoom,
     downloadFile,
+    deleteFileFromRoom,
+    removeDeviceFromRoom,
     leaveRoom,
   } = useConnectRoom(code);
 
@@ -32,13 +35,15 @@ function RoomContent({ code }: RoomPageClientProps) {
       <RoomView
         room={room}
         currentDeviceId={deviceId}
+        isHost={isHost}
         isConnected={isConnected}
         isUploading={isUploading}
         uploadProgress={uploadProgress}
         uploadingFileName={uploadingFileName}
         onUploadFile={uploadFileToRoom}
-        onUploadFiles={uploadFilesToRoom}
         onDownloadFile={downloadFile}
+        onDeleteFile={deleteFileFromRoom}
+        onRemoveDevice={removeDeviceFromRoom}
         onLeaveRoom={leaveRoom}
       />
     );

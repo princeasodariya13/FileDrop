@@ -97,6 +97,17 @@ export function useConnectRoom(initialCode?: string) {
 
     socket.on("devices_updated", ({ devices }: { devices: RoomDevice[] }) => {
       setRoom((prev) => (prev ? { ...prev, devices } : prev));
+      if (dId) {
+        const myDev = devices.find((d) => d.deviceId === dId);
+        if (myDev) {
+          setIsHost((prevHost) => {
+            if (!prevHost && myDev.isHost) {
+              push("You are now the room host.", "info");
+            }
+            return myDev.isHost;
+          });
+        }
+      }
     });
 
     socket.on("file_shared", (newFile: RoomFile) => {
@@ -110,6 +121,31 @@ export function useConnectRoom(initialCode?: string) {
         };
       });
       push(`New file received: ${newFile.fileName}`, "success");
+    });
+
+    socket.on("file_deleted", ({ fileId }: { fileId: string }) => {
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          files: prev.files.filter((f) => f.fileId !== fileId),
+        };
+      });
+      push("A file was removed from the room", "info");
+    });
+
+    socket.on("device_removed", ({ message }: { message?: string }) => {
+      cleanupSocket();
+      try {
+        sessionStorage.removeItem(SESSION_KEY);
+      } catch (e) {}
+      setRoom(null);
+      setDeviceId(null);
+      setDeviceToken(null);
+      setIsHost(false);
+      const msg = message || "The host removed your device from this room.";
+      setError(msg);
+      push(msg, "error");
     });
 
     socket.on("room_closed", () => {
@@ -242,8 +278,8 @@ export function useConnectRoom(initialCode?: string) {
     }
   };
 
-  // Upload a single file directly into the active room
-  const uploadFileToRoom = async (file: File) => {
+  // Upload a single file directly into the active room with optional private recipient filtering
+  const uploadFileToRoom = async (file: File, recipientDeviceIds?: string[]) => {
     if (!room || !deviceId || !deviceToken) {
       push("You must be connected to a room to upload files.", "error");
       return;
@@ -294,7 +330,7 @@ export function useConnectRoom(initialCode?: string) {
       const uploadedFile = await completeUpload(session.sessionId, completedParts);
       setUploadProgress(98);
 
-      // 4. Attach file to room
+      // 4. Attach file to room with optional recipient filtering
       const attachRes = await fetch(`${API_BASE}/api/rooms/${room.roomCode}/files`, {
         method: "POST",
         headers: {
@@ -305,6 +341,8 @@ export function useConnectRoom(initialCode?: string) {
         body: JSON.stringify({
           fileId: uploadedFile.fileId,
           possessionToken: uploadedFile.possessionToken,
+          recipientDeviceIds:
+            recipientDeviceIds && recipientDeviceIds.length > 0 ? recipientDeviceIds : undefined,
         }),
       });
 
@@ -370,19 +408,103 @@ export function useConnectRoom(initialCode?: string) {
     }
   };
 
+  // Delete a shared room file (only permitted if uploaded by this device)
+  const deleteFileFromRoom = async (fileId: string) => {
+    if (!room || !deviceId || !deviceToken) {
+      push("You must be connected to delete files.", "error");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/rooms/${room.roomCode}/files/${fileId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": deviceId,
+          "x-device-token": deviceToken,
+        },
+      });
+
+      const body = await res.json();
+      if (!res.ok || !body.success) {
+        throw new Error(body?.error?.message || "Failed to delete file.");
+      }
+
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          files: prev.files.filter((f) => f.fileId !== fileId),
+        };
+      });
+      push("File removed from room", "success");
+    } catch (err: any) {
+      push(err.message || "Could not delete file.", "error");
+      throw err;
+    }
+  };
+
+  // Remove a device from the room (Host only)
+  const removeDeviceFromRoom = async (targetDeviceId: string) => {
+    if (!room || !deviceId || !deviceToken) {
+      push("Host credentials required to remove device.", "error");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/rooms/${room.roomCode}/devices/${targetDeviceId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": deviceId,
+          "x-device-token": deviceToken,
+        },
+      });
+
+      const body = await res.json();
+      if (!res.ok || !body.success) {
+        throw new Error(body?.error?.message || "Failed to remove device.");
+      }
+
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          devices: prev.devices.filter((d) => d.deviceId !== targetDeviceId),
+        };
+      });
+      push("Device removed from room", "success");
+    } catch (err: any) {
+      push(err.message || "Could not remove device.", "error");
+      throw err;
+    }
+  };
+
   // Leave room
   const leaveRoom = async () => {
     if (room && deviceId) {
       try {
-        await fetch(`${API_BASE}/api/rooms/${room.roomCode}/leave`, {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          "x-device-id": deviceId,
+        };
+        if (deviceToken) {
+          headers["x-device-token"] = deviceToken;
+        }
+
+        const res = await fetch(`${API_BASE}/api/rooms/${room.roomCode}/leave`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-device-id": deviceId,
-          },
+          headers,
           body: JSON.stringify({ deviceId }),
         });
-      } catch (e) {}
+
+        const body = await res.json();
+        if (!res.ok || !body.success) {
+          console.warn("Leave room server warning:", body?.error?.message);
+        }
+      } catch (e) {
+        console.warn("Network error while notifying server of departure:", e);
+      }
     }
 
     try {
@@ -460,6 +582,8 @@ export function useConnectRoom(initialCode?: string) {
     uploadFileToRoom,
     uploadFilesToRoom,
     downloadFile,
+    deleteFileFromRoom,
+    removeDeviceFromRoom,
     leaveRoom,
   };
 }

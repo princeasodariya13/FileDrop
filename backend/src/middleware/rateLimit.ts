@@ -1,10 +1,13 @@
 import rateLimit from "express-rate-limit";
 
+const isTest = process.env.NODE_ENV === "test";
+
 export const uploadSessionLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTest,
   message: {
     success: false,
     error: { code: "RATE_LIMITED", message: "Too many upload attempts. Please slow down." },
@@ -16,6 +19,7 @@ export const partLimiter = rateLimit({
   limit: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTest,
   message: {
     success: false,
     error: { code: "RATE_LIMITED", message: "Too many part requests. Please slow down." },
@@ -27,6 +31,7 @@ export const fileInfoLimiter = rateLimit({
   limit: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTest,
   message: {
     success: false,
     error: { code: "RATE_LIMITED", message: "Too many file requests. Please slow down." },
@@ -38,6 +43,7 @@ export const downloadUrlLimiter = rateLimit({
   limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTest,
   message: {
     success: false,
     error: { code: "RATE_LIMITED", message: "Too many download requests. Please slow down." },
@@ -49,6 +55,7 @@ export const codeLookupLimiter = rateLimit({
   limit: 15,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTest,
   message: {
     success: false,
     error: { code: "RATE_LIMITED", message: "Too many code lookup attempts. Please slow down." },
@@ -60,6 +67,7 @@ export const roomCreateLimiter = rateLimit({
   limit: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTest,
   message: {
     success: false,
     error: { code: "RATE_LIMITED", message: "Too many room creation requests. Please slow down." },
@@ -71,6 +79,7 @@ export const roomCodeGuessLimiter = rateLimit({
   limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTest,
   message: {
     success: false,
     error: { code: "RATE_LIMITED", message: "Too many room attempts. Please try again in a moment." },
@@ -82,5 +91,6 @@ export const generalLimiter = rateLimit({
   limit: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTest,
 });
 

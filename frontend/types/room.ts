@@ -16,6 +16,7 @@ export interface RoomFile {
   mimeType: string;
   uploadedByDeviceId: string;
   uploadedByDeviceName: string;
+  recipientDeviceIds?: string[];
   createdAt: string;
 }
 
