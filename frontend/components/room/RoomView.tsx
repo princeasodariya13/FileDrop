@@ -513,10 +513,10 @@ export function RoomView({
               {isRoomMenuOpen && (
                 <>
                   <div
-                    className="fixed inset-0 z-40"
+                    className="fixed inset-0 z-[9990]"
                     onClick={() => setIsRoomMenuOpen(false)}
                   />
-                  <div className="absolute right-0 top-full mt-2 w-52 rounded-2xl dropdown-card p-1.5 z-50 shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
+                  <div className="absolute left-0 top-full mt-2 w-56 max-w-[calc(100vw-3rem)] rounded-2xl dropdown-card p-1.5 z-[9995] shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
                     <button
                       type="button"
                       onClick={() => {
@@ -525,11 +525,11 @@ export function RoomView({
                       }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400 shrink-0">
                         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                       </svg>
-                      <span>{copiedLink ? "Link Copied!" : "Copy Invite Link"}</span>
+                      <span className="truncate">{copiedLink ? "Link Copied!" : "Copy Invite Link"}</span>
                     </button>
 
                     <button
@@ -540,11 +540,11 @@ export function RoomView({
                       }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400 shrink-0">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
-                      <span>Copy Room #{room.roomCode}</span>
+                      <span className="truncate">Copy Room #{room.roomCode}</span>
                     </button>
 
                     <div className="my-1 border-t border-surface" />
@@ -557,7 +557,7 @@ export function RoomView({
                       }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                         <polyline points="16 17 21 12 16 7" />
                         <line x1="21" y1="12" x2="9" y2="12" />
@@ -1175,8 +1175,8 @@ export function RoomView({
 
       {/* Edit Recipients Modal */}
       {mounted && typeof document !== "undefined" && fileToEditRecipients && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-md rounded-3xl modal-card p-6 shadow-2xl space-y-5 animate-scale-up">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-md rounded-3xl modal-card p-6 shadow-2xl space-y-5 animate-scale-up z-[100000]">
             {/* Header */}
             <div className="flex items-center justify-between pb-1 border-b border-surface-hover">
               <div className="flex items-center gap-3">
@@ -1323,8 +1323,8 @@ export function RoomView({
 
       {/* Delete Confirmation Modal */}
       {mounted && typeof document !== "undefined" && fileToDelete && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up z-[100000]">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
                 <svg
@@ -1377,8 +1377,8 @@ export function RoomView({
 
       {/* Device Removal Confirmation Modal */}
       {mounted && typeof document !== "undefined" && deviceToRemove && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up z-[100000]">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
                 <svg
@@ -1434,8 +1434,8 @@ export function RoomView({
 
       {/* Leave Room Confirmation Modal */}
       {mounted && typeof document !== "undefined" && isLeaveModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up z-[100000]">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
                 <svg

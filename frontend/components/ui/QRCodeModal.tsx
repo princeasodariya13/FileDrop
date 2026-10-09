@@ -81,7 +81,7 @@ export function QRCodeModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -91,7 +91,7 @@ export function QRCodeModal({
     >
       <div
         ref={modalRef}
-        className="relative w-full max-w-sm rounded-3xl modal-card p-6 sm:p-7 shadow-2xl animate-fade-in-scale space-y-5 text-center"
+        className="relative w-full max-w-sm rounded-3xl modal-card p-6 sm:p-7 shadow-2xl animate-fade-in-scale space-y-5 text-center z-[100000]"
       >
         {/* Close Button */}
         <button

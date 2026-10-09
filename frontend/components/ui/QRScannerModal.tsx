@@ -321,7 +321,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           stopCameraStream();
@@ -332,7 +332,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       aria-modal="true"
       aria-label="QR Code Scanner"
     >
-      <div className="relative w-full max-w-sm sm:max-w-md overflow-hidden rounded-3xl bg-slate-950 border border-white/10 shadow-[0_10px_50px_rgba(0,0,0,0.8)] animate-fade-in-scale flex flex-col items-center">
+      <div className="relative w-full max-w-sm sm:max-w-md overflow-hidden rounded-3xl bg-slate-950 border border-white/10 shadow-[0_10px_50px_rgba(0,0,0,0.8)] animate-fade-in-scale flex flex-col items-center z-[100000]">
         {/* Top Header Bar */}
         <div className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-950 border-b border-white/10 z-20">
           <div className="flex items-center gap-2.5">
