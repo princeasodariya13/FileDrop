@@ -88,6 +88,10 @@ export function RoomView({
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState<boolean>(false);
   const [isLeaving, setIsLeaving] = useState<boolean>(false);
 
+  // Responsive mobile 3-dot action menus
+  const [isRoomMenuOpen, setIsRoomMenuOpen] = useState<boolean>(false);
+  const [activeFileMenuId, setActiveFileMenuId] = useState<string | null>(null);
+
   // Prevent background scroll when any modal is open
   useEffect(() => {
     const isAnyModalOpen = Boolean(fileToDelete || deviceToRemove || isLeaveModalOpen || isQRModalOpen);
@@ -112,7 +116,7 @@ export function RoomView({
     }
   }, []);
 
-  // Close recipient dropdown when clicking outside
+  // Close recipient dropdown & menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -468,7 +472,8 @@ export function RoomView({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Desktop Actions */}
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
             <Button variant="secondary" size="sm" onClick={copyInviteLink} className="text-xs">
               {copiedLink ? "Link Copied!" : "Copy Link"}
             </Button>
@@ -483,6 +488,86 @@ export function RoomView({
             >
               Leave
             </Button>
+          </div>
+
+          {/* Mobile Actions: Show QR + 3-Dot Menu */}
+          <div className="flex sm:hidden items-center gap-2 shrink-0">
+            <Button variant="secondary" size="sm" onClick={() => setIsQRModalOpen(true)} className="text-xs py-1.5 px-3">
+              Show QR
+            </Button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsRoomMenuOpen((prev) => !prev)}
+                className="p-2 rounded-xl text-ink-300 hover:text-ink-50 bg-surface hover:bg-surface-hover border border-surface-hover transition-colors"
+                title="More Room Actions"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="12" cy="5" r="1" />
+                  <circle cx="12" cy="19" r="1" />
+                </svg>
+              </button>
+
+              {isRoomMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsRoomMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-2 w-52 rounded-2xl dropdown-card p-1.5 z-50 shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsRoomMenuOpen(false);
+                        copyInviteLink();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                      </svg>
+                      <span>{copiedLink ? "Link Copied!" : "Copy Invite Link"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsRoomMenuOpen(false);
+                        copyCode();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      <span>Copy Room #{room.roomCode}</span>
+                    </button>
+
+                    <div className="my-1 border-t border-surface" />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsRoomMenuOpen(false);
+                        setIsLeaveModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                      <span>Leave Room</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -936,7 +1021,8 @@ export function RoomView({
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 ml-3 shrink-0">
+                        {/* Desktop Actions */}
+                        <div className="hidden sm:flex items-center gap-2 ml-3 shrink-0">
                           <Button
                             size="sm"
                             disabled={isDownloading}
@@ -998,6 +1084,83 @@ export function RoomView({
                                 <line x1="14" y1="11" x2="14" y2="17" />
                               </svg>
                             </button>
+                          )}
+                        </div>
+
+                        {/* Mobile Actions: Compact Download + 3-Dot Menu */}
+                        <div className="flex sm:hidden items-center gap-1.5 ml-2 shrink-0">
+                          <Button
+                            size="sm"
+                            disabled={isDownloading}
+                            onClick={() => handleDownload(file.fileId, file.fileName)}
+                            className="text-xs px-2.5 py-1"
+                          >
+                            {isDownloading ? "..." : "Download"}
+                          </Button>
+
+                          {canDelete && (
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setActiveFileMenuId(
+                                    activeFileMenuId === file.fileId ? null : file.fileId
+                                  )
+                                }
+                                className="p-1.5 rounded-lg text-ink-300 hover:text-ink-50 bg-surface hover:bg-surface-hover border border-surface-hover transition-colors"
+                                title="File Options"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <circle cx="12" cy="12" r="1" />
+                                  <circle cx="12" cy="5" r="1" />
+                                  <circle cx="12" cy="19" r="1" />
+                                </svg>
+                              </button>
+
+                              {activeFileMenuId === file.fileId && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={() => setActiveFileMenuId(null)}
+                                  />
+                                  <div className="absolute right-0 top-full mt-1.5 w-44 rounded-2xl dropdown-card p-1.5 z-50 shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
+                                    {onUpdateRecipients && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveFileMenuId(null);
+                                          setFileToEditRecipients(file);
+                                          setEditRecipientIds(file.recipientDeviceIds || []);
+                                        }}
+                                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
+                                      >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
+                                          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                          <circle cx="8.5" cy="7" r="4" />
+                                          <polyline points="17 11 19 13 23 9" />
+                                        </svg>
+                                        <span>Edit Recipients</span>
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveFileMenuId(null);
+                                        setFileToDelete(file);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                                    >
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="3 6 5 6 21 6" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                      </svg>
+                                      <span>Delete File</span>
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>

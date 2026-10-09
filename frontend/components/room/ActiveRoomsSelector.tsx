@@ -67,15 +67,137 @@ export function ActiveRoomsSelector({
     }
   };
 
-  return (
-    <div className="space-y-3">
-      {/* Active Rooms Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-surface/70 border border-surface-hover backdrop-blur-md">
-        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
-          <span className="text-[11px] font-bold text-ink-400 uppercase tracking-wider font-mono mr-1 shrink-0">
-            Active Rooms ({activeRooms.length}):
-          </span>
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  return (
+    <div className="space-y-2">
+      {/* Active Rooms Bar */}
+      <div className="p-3 sm:p-3.5 rounded-2xl bg-surface/70 border border-surface-hover backdrop-blur-md space-y-2.5">
+        {/* Top Header Row: Label & Actions */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-ink-400 uppercase tracking-wider font-mono">
+              Active Rooms
+            </span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold font-mono bg-brand-500/15 text-brand-400 border border-brand-500/20">
+              {activeRooms.length}
+            </span>
+          </div>
+
+          {/* Desktop Actions */}
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setModalError(null);
+                setIsCreateModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-ink-100 bg-surface hover:bg-surface-hover border border-surface-hover hover:border-brand-500/30 transition-all cursor-pointer"
+              title="Create another room without leaving current room"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>New Room</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setModalError(null);
+                setIsJoinModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-ink-100 bg-surface hover:bg-surface-hover border border-surface-hover hover:border-brand-500/30 transition-all cursor-pointer"
+              title="Join another room code"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <polyline points="10 17 15 12 10 7" />
+                <line x1="15" y1="12" x2="3" y2="12" />
+              </svg>
+              <span>Join Another</span>
+            </button>
+          </div>
+
+          {/* Mobile 3-Dot / Options Menu Button */}
+          <div className="relative flex sm:hidden items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setModalError(null);
+                setIsCreateModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-ink-100 bg-surface hover:bg-surface-hover border border-surface-hover transition-all"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>New</span>
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+                className="p-1.5 rounded-xl text-ink-300 hover:text-ink-50 bg-surface hover:bg-surface-hover border border-surface-hover transition-colors"
+                title="Room Options"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="12" cy="5" r="1" />
+                  <circle cx="12" cy="19" r="1" />
+                </svg>
+              </button>
+
+              {isMobileMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1.5 w-48 rounded-2xl dropdown-card p-1.5 z-40 shadow-xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setModalError(null);
+                        setIsCreateModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      <span>Create New Room</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setModalError(null);
+                        setIsJoinModalOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                        <polyline points="10 17 15 12 10 7" />
+                        <line x1="15" y1="12" x2="3" y2="12" />
+                      </svg>
+                      <span>Join Another Room</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Scrollable Room Pills Row */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar w-full">
           {activeRooms.map((rm) => {
             const isActive = rm.roomCode === currentRoomCode;
             return (
@@ -90,7 +212,7 @@ export function ActiveRoomsSelector({
                 }`}
               >
                 <span className={`h-2 w-2 rounded-full ${isActive ? "bg-white animate-pulse" : "bg-emerald-500"}`} />
-                <span className="truncate max-w-[140px] font-medium">
+                <span className="truncate max-w-[110px] sm:max-w-[160px] font-medium">
                   {rm.roomName || "Live Room"}
                 </span>
                 <span className={`font-mono text-[10px] ${isActive ? "text-white/80" : "text-ink-400"}`}>
@@ -106,42 +228,6 @@ export function ActiveRoomsSelector({
               </button>
             );
           })}
-        </div>
-
-        {/* Action Buttons: New Room & Join Room */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setModalError(null);
-              setIsCreateModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-ink-100 bg-surface hover:bg-surface-hover border border-surface-hover hover:border-brand-500/30 transition-all"
-            title="Create another room without leaving current room"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>New Room</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setModalError(null);
-              setIsJoinModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-ink-100 bg-surface hover:bg-surface-hover border border-surface-hover hover:border-brand-500/30 transition-all"
-            title="Join another room code"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-              <polyline points="10 17 15 12 10 7" />
-              <line x1="15" y1="12" x2="3" y2="12" />
-            </svg>
-            <span>Join Another</span>
-          </button>
         </div>
       </div>
 
