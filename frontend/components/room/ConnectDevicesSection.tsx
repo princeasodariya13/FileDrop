@@ -31,6 +31,7 @@ export function ConnectDevicesSection() {
     updateFileRecipients,
     deleteFileFromRoom,
     removeDeviceFromRoom,
+    updateDeviceName,
     leaveRoom,
   } = useConnectRoom();
 
@@ -63,6 +64,7 @@ export function ConnectDevicesSection() {
         onDeleteFile={deleteFileFromRoom}
         onUpdateRecipients={updateFileRecipients}
         onRemoveDevice={removeDeviceFromRoom}
+        onUpdateDeviceName={updateDeviceName}
         onLeaveRoom={leaveRoom}
       />
     );

@@ -979,6 +979,51 @@ export function useConnectRoom(initialCode?: string) {
     }
   };
 
+  // Update current device name (User can only edit their own device name)
+  const updateDeviceName = async (newDeviceName: string) => {
+    const cleanName = newDeviceName.trim();
+    if (!cleanName) {
+      push("Device name cannot be empty.", "error");
+      return;
+    }
+    if (!room || !deviceId || !deviceToken) {
+      push("You must be connected to a room to change your device name.", "error");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/rooms/${room.roomCode}/devices/${deviceId}/name`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": deviceId,
+          "x-device-token": deviceToken,
+        },
+        body: JSON.stringify({ deviceName: cleanName }),
+      });
+
+      const body = await res.json();
+      if (!res.ok || !body.success) {
+        throw new Error(body?.error?.message || "Failed to update device name.");
+      }
+
+      setRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          devices: prev.devices.map((d) =>
+            d.deviceId === deviceId ? { ...d, deviceName: cleanName } : d
+          ),
+        };
+      });
+
+      push(`Device name updated to "${cleanName}"`, "success");
+    } catch (err: any) {
+      push(err.message || "Could not update device name.", "error");
+      throw err;
+    }
+  };
+
   // Leave room voluntarily
   const leaveRoom = async (targetRoomCode?: string) => {
     const codeToLeave = targetRoomCode || currentRoomCode || room?.roomCode;
@@ -1256,6 +1301,7 @@ export function useConnectRoom(initialCode?: string) {
     updateFileRecipients,
     deleteFileFromRoom,
     removeDeviceFromRoom,
+    updateDeviceName,
     leaveRoom,
     refreshActiveRoomsList,
   };

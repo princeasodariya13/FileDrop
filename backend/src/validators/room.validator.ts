@@ -35,3 +35,9 @@ export const leaveRoomSchema = z.object({
 });
 
 export type LeaveRoomInput = z.infer<typeof leaveRoomSchema>;
+
+export const updateDeviceNameSchema = z.object({
+  deviceName: z.string().trim().min(1, "Device name is required").max(50, "Device name cannot exceed 50 characters"),
+});
+
+export type UpdateDeviceNameInput = z.infer<typeof updateDeviceNameSchema>;

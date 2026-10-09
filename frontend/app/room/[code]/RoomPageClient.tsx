@@ -38,6 +38,7 @@ function RoomContent({ code }: RoomPageClientProps) {
     updateFileRecipients,
     deleteFileFromRoom,
     removeDeviceFromRoom,
+    updateDeviceName,
     leaveRoom,
   } = useConnectRoom(code);
 
@@ -116,6 +117,7 @@ function RoomContent({ code }: RoomPageClientProps) {
         onDeleteFile={deleteFileFromRoom}
         onUpdateRecipients={updateFileRecipients}
         onRemoveDevice={removeDeviceFromRoom}
+        onUpdateDeviceName={updateDeviceName}
         onLeaveRoom={leaveRoom}
       />
     );

@@ -16,6 +16,7 @@ import {
   addRoomFileSchema,
   updateRoomFileRecipientsSchema,
   leaveRoomSchema,
+  updateDeviceNameSchema,
 } from "@/validators/room.validator";
 import {
   broadcastFileShared,
@@ -980,3 +981,81 @@ export async function removeRoomDevice(req: Request, res: Response, next: NextFu
     next(err);
   }
 }
+
+/**
+ * PATCH /api/rooms/:code/devices/:deviceId/name — Update device name (Only the device itself can edit its own name)
+ */
+export async function updateRoomDeviceName(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rawCode = req.params.code;
+    const targetDeviceId = req.params.deviceId;
+    if (!rawCode) {
+      throw new ApiError(400, "INVALID_PARAMS", "Room code is required.");
+    }
+
+    const callerDeviceId = req.headers["x-device-id"] as string;
+    const callerDeviceToken = req.headers["x-device-token"] as string;
+
+    if (!callerDeviceId || !callerDeviceToken) {
+      throw new ApiError(401, "UNAUTHORIZED", "Device credentials required to edit name.");
+    }
+
+    // If targetDeviceId is in URL params, strictly ensure caller is only editing their own device
+    if (targetDeviceId && callerDeviceId !== targetDeviceId) {
+      throw new ApiError(403, "FORBIDDEN", "You can only edit your own device name.");
+    }
+
+    const parsed = updateDeviceNameSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ApiError(400, "VALIDATION_ERROR", parsed.error.errors[0]?.message ?? "Invalid device name.");
+    }
+
+    const { deviceName } = parsed.data;
+    const now = new Date();
+
+    const room = await RoomModel.findOne({
+      $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
+      status: "active",
+      expiresAt: { $gt: now },
+    });
+
+    if (!room) {
+      throw new ApiError(404, "ROOM_NOT_FOUND", "This room does not exist or has expired.");
+    }
+
+    // Authenticate device token and room membership
+    const deviceIndex = room.devices.findIndex(
+      (d) => d.deviceId === callerDeviceId && d.deviceToken === callerDeviceToken
+    );
+
+    if (deviceIndex === -1) {
+      throw new ApiError(401, "UNAUTHORIZED", "Invalid device credentials for this room.");
+    }
+
+    // Update device name
+    room.devices[deviceIndex].deviceName = deviceName;
+    room.lastActivityAt = now;
+    await room.save();
+
+    const sanitized = sanitizeDevices(room.devices);
+
+    logger.info(
+      { roomId: room.roomId, roomCode: room.roomCode, deviceId: callerDeviceId, newDeviceName: deviceName },
+      "Device name updated"
+    );
+
+    // Broadcast updated device list to all participants in real time
+    broadcastDevicesUpdated(room.roomCode, sanitized);
+
+    return ok(res, {
+      success: true,
+      roomCode: room.roomCode,
+      deviceId: callerDeviceId,
+      deviceName,
+      devices: sanitized,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+

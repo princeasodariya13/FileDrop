@@ -1629,6 +1629,86 @@ describe("Connect Devices Room Endpoints & Foundation", () => {
       expect(codes).toContain(r1.data.roomCode);
       expect(codes).toContain(r2.data.roomCode);
     });
+
+    it("allows a device to edit its own device name and rejects editing other devices' names", async () => {
+      // 1. Host creates room
+      const createRes = await fetch(`${baseUrl}/api/rooms/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceName: "Original Host Name", roomName: "Renaming Room" }),
+      });
+      const createJson = (await createRes.json()) as any;
+      const roomCode = createJson.data.roomCode;
+      const hostDevId = createJson.data.deviceId;
+      const hostDevToken = createJson.data.deviceToken;
+
+      // 2. Peer joins room
+      const joinRes = await fetch(`${baseUrl}/api/rooms/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: roomCode, deviceName: "Original Peer Name" }),
+      });
+      const joinJson = (await joinRes.json()) as any;
+      const peerDevId = joinJson.data.deviceId;
+      const peerDevToken = joinJson.data.deviceToken;
+
+      // 3. Peer edits their OWN device name -> should succeed (200 OK)
+      const editPeerRes = await fetch(`${baseUrl}/api/rooms/${roomCode}/devices/${peerDevId}/name`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": peerDevId,
+          "x-device-token": peerDevToken,
+        },
+        body: JSON.stringify({ deviceName: "John's Custom iPhone 15 Pro" }),
+      });
+      expect(editPeerRes.status).toBe(200);
+      const editPeerJson = (await editPeerRes.json()) as any;
+      expect(editPeerJson.success).toBe(true);
+      expect(editPeerJson.data.deviceName).toBe("John's Custom iPhone 15 Pro");
+
+      // Verify updated name in GET /api/rooms/:code
+      const getRoomRes = await fetch(`${baseUrl}/api/rooms/${roomCode}`);
+      const getRoomJson = (await getRoomRes.json()) as any;
+      const updatedPeer = getRoomJson.data.devices.find((d: any) => d.deviceId === peerDevId);
+      expect(updatedPeer?.deviceName).toBe("John's Custom iPhone 15 Pro");
+
+      // 4. Peer attempts to edit the HOST's device name -> must be rejected with 403 FORBIDDEN
+      const unauthorizedEditRes = await fetch(
+        `${baseUrl}/api/rooms/${roomCode}/devices/${hostDevId}/name`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "x-device-id": peerDevId,
+            "x-device-token": peerDevToken,
+          },
+          body: JSON.stringify({ deviceName: "Hacked Host Name" }),
+        }
+      );
+      expect(unauthorizedEditRes.status).toBe(403);
+      const unauthorizedJson = (await unauthorizedEditRes.json()) as any;
+      expect(unauthorizedJson.error.message).toContain("only edit your own device name");
+
+      // Verify host name was NOT modified
+      const roomInDb = await RoomModel.findOne({ roomCode });
+      const hostInDb = roomInDb?.devices.find((d) => d.deviceId === hostDevId);
+      expect(hostInDb?.deviceName).toBe("Original Host Name");
+
+      // 5. Host edits their own device name -> should succeed
+      const editHostRes = await fetch(`${baseUrl}/api/rooms/${roomCode}/devices/${hostDevId}/name`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": hostDevId,
+          "x-device-token": hostDevToken,
+        },
+        body: JSON.stringify({ deviceName: "HQ Master Workstation" }),
+      });
+      expect(editHostRes.status).toBe(200);
+      const editHostJson = (await editHostRes.json()) as any;
+      expect(editHostJson.data.deviceName).toBe("HQ Master Workstation");
+    });
   });
 });
 

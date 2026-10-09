@@ -9,6 +9,7 @@ import {
   updateRoomFileRecipients,
   deleteRoomFile,
   removeRoomDevice,
+  updateRoomDeviceName,
   downloadRoomFile,
   leaveRoom,
 } from "@/controllers/room.controller";
@@ -36,6 +37,8 @@ router.post("/:code/files", addFileToRoom);
 router.patch("/:code/files/:fileId/recipients", updateRoomFileRecipients);
 router.delete("/:code/files/:fileId", deleteRoomFile);
 router.delete("/:code/devices/:deviceId", removeRoomDevice);
+router.patch("/:code/devices/:deviceId/name", updateRoomDeviceName);
+router.patch("/:code/device-name", updateRoomDeviceName);
 router.post("/:code/files/:fileId/download", downloadUrlLimiter, downloadRoomFile);
 router.get("/:code/files/:fileId/download", downloadUrlLimiter, downloadRoomFile);
 router.post("/:code/leave", leaveRoom);

@@ -5,6 +5,7 @@ interface DeviceBadgeProps {
   isCurrentDevice?: boolean;
   isHostViewer?: boolean;
   onRemoveDevice?: (device: RoomDevice) => void;
+  onEditDeviceName?: (device: RoomDevice) => void;
 }
 
 export function DeviceBadge({
@@ -12,6 +13,7 @@ export function DeviceBadge({
   isCurrentDevice,
   isHostViewer,
   onRemoveDevice,
+  onEditDeviceName,
 }: DeviceBadgeProps) {
   const isMobile = device.deviceType === "mobile";
   const isTablet = device.deviceType === "tablet";
@@ -102,30 +104,54 @@ export function DeviceBadge({
         </div>
       </div>
 
-      {canRemove && (
-        <button
-          type="button"
-          onClick={() => onRemoveDevice?.(device)}
-          className="p-1.5 rounded-lg text-ink-400 hover:text-red-400 hover:bg-red-500/10 transition-colors ml-2 shrink-0"
-          title={`Remove ${device.deviceName} from room`}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+      <div className="flex items-center gap-1 shrink-0 ml-2">
+        {isCurrentDevice && onEditDeviceName && (
+          <button
+            type="button"
+            onClick={() => onEditDeviceName(device)}
+            className="p-1.5 rounded-lg text-ink-300 hover:text-brand-400 hover:bg-brand-500/10 transition-colors"
+            title="Edit your device name"
           >
-            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="8.5" cy="7" r="4" />
-            <line x1="18" y1="8" x2="23" y2="13" />
-            <line x1="23" y1="8" x2="18" y2="13" />
-          </svg>
-        </button>
-      )}
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+            </svg>
+          </button>
+        )}
+
+        {canRemove && (
+          <button
+            type="button"
+            onClick={() => onRemoveDevice?.(device)}
+            className="p-1.5 rounded-lg text-ink-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            title={`Remove ${device.deviceName} from room`}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="8.5" cy="7" r="4" />
+              <line x1="18" y1="8" x2="23" y2="13" />
+              <line x1="23" y1="8" x2="18" y2="13" />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
