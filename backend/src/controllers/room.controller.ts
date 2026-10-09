@@ -256,6 +256,8 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
     const activeRooms = await Promise.all(
       activeRoomsList.map(async (r) => {
         const synced = await syncRoomFiles(r);
+        const myDev = r.devices.find((d) => d.ipHash === ipHash);
+        const isCreator = r.creatorIpHash === ipHash;
         return {
           roomCode: r.roomCode,
           roomId: r.roomId,
@@ -263,6 +265,9 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
           status: r.status,
           expiresAt: r.expiresAt,
           lastActivityAt: r.lastActivityAt,
+          isHost: myDev ? myDev.isHost : isCreator,
+          deviceId: myDev?.deviceId,
+          participantCount: r.devices.length,
           devicesCount: r.devices.length,
           devices: sanitizeDevices(r.devices),
           filesCount: synced.length,

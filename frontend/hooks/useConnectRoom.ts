@@ -152,16 +152,58 @@ export function useConnectRoom(initialCode?: string) {
   }, []);
 
   const refreshActiveRoomsList = useCallback(async () => {
-    const map = getStoredSessionsMap();
-    const codes = Object.keys(map);
-    if (codes.length === 0) {
-      setActiveRooms([]);
-      return;
+    const localMap = getStoredSessionsMap();
+    const localCodes = Object.keys(localMap);
+
+    // 1. Query server for all active rooms associated with this client/IP
+    let serverRooms: any[] = [];
+    try {
+      const lookupRes = await fetch(`${API_BASE}/api/rooms/active/lookup`);
+      const lookupBody = await lookupRes.json();
+      if (lookupRes.ok && lookupBody.success && Array.isArray(lookupBody.data?.activeRooms)) {
+        serverRooms = lookupBody.data.activeRooms;
+      }
+    } catch (err) {
+      // Network blip; fall back to locally saved sessions
     }
 
-    const summaries: RoomSummary[] = [];
-    for (const code of codes) {
-      const session = map[code];
+    // 2. Fetch individual room states for any local session not covered or to refresh details
+    const summariesMap: Record<string, RoomSummary> = {};
+
+    // Populate from server lookup
+    for (const sr of serverRooms) {
+      if (sr && sr.roomCode) {
+        const localSession = localMap[sr.roomCode];
+        summariesMap[sr.roomCode] = {
+          roomCode: sr.roomCode,
+          roomId: sr.roomId || localSession?.roomId || "",
+          roomName: sr.roomName || localSession?.roomName || "Live Room",
+          isHost: localSession?.isHost ?? sr.isHost ?? false,
+          deviceId: localSession?.deviceId || sr.deviceId,
+          participantCount: sr.participantCount ?? sr.devicesCount ?? sr.devices?.length ?? 1,
+          filesCount: sr.filesCount ?? sr.files?.length ?? 0,
+          status: sr.status || "active",
+          expiresAt: sr.expiresAt,
+          lastActivityAt: sr.lastActivityAt,
+        };
+
+        // If this room has a local session, ensure its roomName / roomId are updated in local storage
+        if (localSession) {
+          localMap[sr.roomCode] = {
+            ...localSession,
+            roomId: sr.roomId || localSession.roomId,
+            roomName: sr.roomName || localSession.roomName,
+            isHost: localSession.isHost ?? sr.isHost ?? false,
+          };
+        }
+      }
+    }
+
+    // Populate / verify remaining local sessions
+    for (const code of localCodes) {
+      if (summariesMap[code]) continue; // Already enriched from server
+
+      const session = localMap[code];
       try {
         const res = await fetch(`${API_BASE}/api/rooms/${code}`, {
           headers: {
@@ -171,31 +213,57 @@ export function useConnectRoom(initialCode?: string) {
         });
         const body = await res.json();
         if (res.ok && body.success && body.data) {
-          summaries.push({
+          const rData = body.data;
+          summariesMap[code] = {
             roomCode: code,
-            roomId: body.data.roomId || session.roomId || "",
-            roomName: body.data.roomName || session.roomName || "Live Room",
+            roomId: rData.roomId || session.roomId || "",
+            roomName: rData.roomName || session.roomName || "Live Room",
             isHost: session.isHost,
             deviceId: session.deviceId,
-            participantCount: body.data.devices?.length || 1,
-            filesCount: body.data.files?.length || 0,
-            status: body.data.status || "active",
-            expiresAt: body.data.expiresAt,
-            lastActivityAt: body.data.lastActivityAt,
-          });
+            participantCount: rData.devices?.length || 1,
+            filesCount: rData.files?.length || 0,
+            status: rData.status || "active",
+            expiresAt: rData.expiresAt,
+            lastActivityAt: rData.lastActivityAt,
+          };
+        } else if (res.status === 404 || body?.error?.code === "ROOM_NOT_FOUND") {
+          // Room expired or closed on server — prune from local storage
+          delete localMap[code];
+        } else {
+          // Temporary server error, keep session stub
+          summariesMap[code] = {
+            roomCode: code,
+            roomId: session.roomId || "",
+            roomName: session.roomName || "Live Room",
+            isHost: session.isHost,
+            deviceId: session.deviceId,
+            participantCount: 1,
+            filesCount: 0,
+            status: "active",
+          };
         }
       } catch {
-        summaries.push({
+        // Network error, keep existing local session stub
+        summariesMap[code] = {
           roomCode: code,
           roomId: session.roomId || "",
           roomName: session.roomName || "Live Room",
           isHost: session.isHost,
           deviceId: session.deviceId,
+          participantCount: 1,
+          filesCount: 0,
           status: "active",
-        });
+        };
       }
     }
-    setActiveRooms(summaries);
+
+    // Save pruned / updated map to localStorage
+    try {
+      localStorage.setItem(SESSIONS_MAP_KEY, JSON.stringify(localMap));
+    } catch {}
+
+    const allSummaries = Object.values(summariesMap);
+    setActiveRooms(allSummaries);
   }, []);
 
   const connectSocket = useCallback((code: string, dId: string, dToken: string) => {
@@ -379,8 +447,14 @@ export function useConnectRoom(initialCode?: string) {
     const session = map[cleanCode];
 
     if (!session) {
-      push("No saved session for room " + cleanCode, "error");
-      return;
+      // If credentials for this room don't exist in this browser, auto-join it
+      try {
+        await joinRoom(cleanCode);
+        return;
+      } catch (err: any) {
+        push("Could not connect to room " + cleanCode, "error");
+        return;
+      }
     }
 
     setIsConnecting(true);
@@ -491,6 +565,24 @@ export function useConnectRoom(initialCode?: string) {
         true
       );
 
+      // Optimistically update activeRooms so it shows immediately
+      const newSummary: RoomSummary = {
+        roomCode: data.roomCode,
+        roomId: data.roomId,
+        roomName: data.roomName || customRoomName || "Live Room",
+        isHost: true,
+        deviceId: data.deviceId,
+        participantCount: data.devices?.length || 1,
+        filesCount: data.files?.length || 0,
+        status: data.status || "active",
+        expiresAt: data.expiresAt,
+        lastActivityAt: new Date().toISOString(),
+      };
+      setActiveRooms((prev) => {
+        const filtered = prev.filter((r) => r.roomCode !== data.roomCode);
+        return [newSummary, ...filtered];
+      });
+
       connectSocket(data.roomCode, data.deviceId, data.deviceToken);
       refreshActiveRoomsList();
       push(`Room created! Code: ${data.roomCode} (${data.roomName || "Live Room"})`, "success");
@@ -559,6 +651,24 @@ export function useConnectRoom(initialCode?: string) {
         },
         true
       );
+
+      // Optimistically update activeRooms so it shows immediately
+      const newSummary: RoomSummary = {
+        roomCode: data.roomCode,
+        roomId: data.roomId,
+        roomName: data.roomName || "Live Room",
+        isHost: data.isHost || false,
+        deviceId: data.deviceId,
+        participantCount: data.devices?.length || 1,
+        filesCount: data.files?.length || 0,
+        status: data.status || "active",
+        expiresAt: data.expiresAt,
+        lastActivityAt: new Date().toISOString(),
+      };
+      setActiveRooms((prev) => {
+        const filtered = prev.filter((r) => r.roomCode !== data.roomCode);
+        return [newSummary, ...filtered];
+      });
 
       connectSocket(data.roomCode, data.deviceId, data.deviceToken);
       refreshActiveRoomsList();
@@ -1020,7 +1130,7 @@ export function useConnectRoom(initialCode?: string) {
     };
   }, [initialCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Multi-tab sync: listen for storage events
+  // Multi-tab and same-tab sync: listen for storage and session changed events
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === SESSIONS_MAP_KEY || e.key === CURRENT_ROOM_KEY) {
@@ -1036,8 +1146,17 @@ export function useConnectRoom(initialCode?: string) {
         }
       }
     };
+
+    const handleCustomChange = () => {
+      refreshActiveRoomsList();
+    };
+
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    window.addEventListener("filedrop_room_session_changed", handleCustomChange);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("filedrop_room_session_changed", handleCustomChange);
+    };
   }, [cleanupSocket, refreshActiveRoomsList]);
 
   return {
