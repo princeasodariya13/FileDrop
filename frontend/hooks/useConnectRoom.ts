@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { RoomState, RoomDevice, RoomFile } from "@/types/room";
-import { getDeviceDefaults } from "@/utils/device";
+import { getDeviceDefaults, getSmartDeviceName } from "@/utils/device";
 import { useToast } from "@/components/ui/Toast";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
@@ -544,8 +544,10 @@ export function useConnectRoom(initialCode?: string) {
     push("Left the room", "info");
   };
 
-  // Auto-restore session from localStorage or initialCode
+  // Auto-restore session from localStorage or active room on this machine
   useEffect(() => {
+    let isCancelled = false;
+
     const restoreSession = async () => {
       try {
         const stored = getStoredSession();
@@ -558,7 +560,7 @@ export function useConnectRoom(initialCode?: string) {
             },
           });
           const body = await res.json();
-          if (res.ok && body.success && body.data) {
+          if (!isCancelled && res.ok && body.success && body.data) {
             const currentDev = body.data.devices?.find(
               (d: RoomDevice) => d.deviceId === stored.deviceId
             );
@@ -582,19 +584,63 @@ export function useConnectRoom(initialCode?: string) {
           // If room not found or device no longer part of active room membership, clear stale storage
           clearStoredSession();
         }
+
+        // If no active session in this browser, check if an active room exists on this device across browsers
+        if (!initialCode) {
+          const lookupRes = await fetch(`${API_BASE}/api/rooms/active/lookup`);
+          const lookupBody = await lookupRes.json();
+          if (!isCancelled && lookupRes.ok && lookupBody.success && lookupBody.data?.activeRoom) {
+            const activeRoomData = lookupBody.data.activeRoom;
+            const existingNames = (activeRoomData.devices || []).map((d: any) => d.deviceName);
+            const { deviceName, deviceType } = getSmartDeviceName(existingNames);
+
+            const joinRes = await fetch(`${API_BASE}/api/rooms/join`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                code: activeRoomData.roomCode,
+                deviceName,
+                deviceType,
+              }),
+            });
+
+            const joinBody = await joinRes.json();
+            if (!isCancelled && joinRes.ok && joinBody.success && joinBody.data) {
+              const joined = joinBody.data;
+              setRoom({
+                roomCode: joined.roomCode,
+                roomId: joined.roomId,
+                status: joined.status,
+                expiresAt: joined.expiresAt,
+                lastActivityAt: new Date().toISOString(),
+                devices: joined.devices,
+                files: joined.files || [],
+              });
+              setDeviceId(joined.deviceId);
+              setDeviceToken(joined.deviceToken);
+              setIsHost(joined.isHost || false);
+
+              saveStoredSession({
+                roomCode: joined.roomCode,
+                deviceId: joined.deviceId,
+                deviceToken: joined.deviceToken,
+                isHost: joined.isHost || false,
+              });
+
+              connectSocket(joined.roomCode, joined.deviceId, joined.deviceToken);
+              push(`Connected to Room ${joined.roomCode} (${deviceName})`, "success");
+            }
+          }
+        }
       } catch (e) {
         // Keep storage on network error so user isn't kicked out during blips
-      }
-
-      // If initial code provided (e.g. from URL /room/123456)
-      if (initialCode && /^\d{6}$/.test(initialCode.trim())) {
-        joinRoom(initialCode.trim());
       }
     };
 
     restoreSession();
 
     return () => {
+      isCancelled = true;
       cleanupSocket();
     };
   }, [initialCode]); // eslint-disable-line react-hooks/exhaustive-deps

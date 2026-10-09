@@ -118,11 +118,15 @@ export async function createRoom(req: Request, res: Response, next: NextFunction
     const deviceToken = generateDeviceToken();
     const expiresAt = new Date(Date.now() + ROOM_TTL_MS);
 
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
+
     const hostDevice: IRoomDevice = {
       deviceId,
       deviceToken,
       deviceName: deviceName.slice(0, 50),
       deviceType,
+      ipHash,
       joinedAt: now,
       lastSeenAt: now,
       isHost: true,
@@ -132,6 +136,7 @@ export async function createRoom(req: Request, res: Response, next: NextFunction
       roomId,
       roomCode,
       hostDeviceId: deviceId,
+      creatorIpHash: ipHash,
       status: "active",
       devices: [hostDevice],
       files: [],
@@ -179,6 +184,9 @@ export async function joinRoom(req: Request, res: Response, next: NextFunction) 
       throw new ApiError(404, "ROOM_NOT_FOUND", "Room not found or has expired. Please check your 6-digit code.");
     }
 
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
+
     const deviceId = generateDeviceId();
     const deviceToken = generateDeviceToken();
 
@@ -187,6 +195,7 @@ export async function joinRoom(req: Request, res: Response, next: NextFunction) 
       deviceToken,
       deviceName: deviceName.slice(0, 50),
       deviceType,
+      ipHash,
       joinedAt: now,
       lastSeenAt: now,
       isHost: false,
@@ -211,6 +220,46 @@ export async function joinRoom(req: Request, res: Response, next: NextFunction) 
       status: room.status,
       devices: sanitizeDevices(room.devices),
       files: syncedFiles,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/rooms/active/lookup — Look up active room for this client IP/machine across browsers
+ */
+export async function getActiveRoomForClient(req: Request, res: Response, next: NextFunction) {
+  try {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
+    const now = new Date();
+
+    const activeRoom = await RoomModel.findOne({
+      $or: [
+        { creatorIpHash: ipHash },
+        { "devices.ipHash": ipHash },
+      ],
+      status: "active",
+      expiresAt: { $gt: now },
+    }).sort({ lastActivityAt: -1 });
+
+    if (!activeRoom) {
+      return ok(res, { activeRoom: null });
+    }
+
+    const syncedFiles = await syncRoomFiles(activeRoom);
+
+    return ok(res, {
+      activeRoom: {
+        roomCode: activeRoom.roomCode,
+        roomId: activeRoom.roomId,
+        status: activeRoom.status,
+        expiresAt: activeRoom.expiresAt,
+        lastActivityAt: activeRoom.lastActivityAt,
+        devices: sanitizeDevices(activeRoom.devices),
+        files: syncedFiles,
+      },
     });
   } catch (err) {
     next(err);

@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createRoom,
   joinRoom,
+  getActiveRoomForClient,
   getRoomState,
   getRoomFiles,
   addFileToRoom,
@@ -22,6 +23,9 @@ const router = Router();
 router.post("/", roomCreateLimiter, createRoom);
 router.post("/create", roomCreateLimiter, createRoom);
 router.post("/join", roomCodeGuessLimiter, joinRoom);
+
+// Cross-browser active room auto-lookup
+router.get("/active/lookup", getActiveRoomForClient);
 
 // Room State & File Operations
 router.get("/:code", roomCodeGuessLimiter, getRoomState);

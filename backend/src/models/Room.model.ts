@@ -7,6 +7,7 @@ export interface IRoomDevice {
   deviceToken: string;
   deviceName: string;
   deviceType: "desktop" | "mobile" | "tablet" | "unknown";
+  ipHash?: string;
   joinedAt: Date;
   lastSeenAt: Date;
   isHost: boolean;
@@ -27,6 +28,7 @@ export interface IRoom extends Document {
   roomId: string;
   roomCode: string;
   hostDeviceId: string;
+  creatorIpHash?: string;
   status: RoomStatus;
   devices: IRoomDevice[];
   files: IRoomFile[];
@@ -46,6 +48,7 @@ const RoomDeviceSchema = new Schema<IRoomDevice>(
       enum: ["desktop", "mobile", "tablet", "unknown"],
       default: "unknown",
     },
+    ipHash: { type: String },
     joinedAt: { type: Date, default: Date.now },
     lastSeenAt: { type: Date, default: Date.now },
     isHost: { type: Boolean, default: false },
@@ -72,6 +75,7 @@ const RoomSchema = new Schema<IRoom>(
     roomId: { type: String, required: true, unique: true, index: true },
     roomCode: { type: String, required: true, unique: true, index: true },
     hostDeviceId: { type: String, required: true },
+    creatorIpHash: { type: String, index: true },
     status: {
       type: String,
       enum: ["active", "expired", "closed"],
