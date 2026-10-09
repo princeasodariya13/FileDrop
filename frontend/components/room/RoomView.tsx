@@ -436,7 +436,7 @@ export function RoomView({
               Connected Devices ({room.devices.length})
             </span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {room.devices.map((device) => (
               <DeviceBadge
                 key={device.deviceId}

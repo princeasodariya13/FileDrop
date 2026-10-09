@@ -80,10 +80,10 @@ export function DeviceBadge({
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <p className="truncate text-xs font-semibold text-ink-50">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-semibold text-ink-50 break-words leading-snug">
               {device.deviceName}
-            </p>
+            </span>
             {isCurrentDevice && (
               <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-500/20 text-brand-400 border border-brand-500/30">
                 You
@@ -95,7 +95,7 @@ export function DeviceBadge({
               </span>
             )}
           </div>
-          <p className="text-[10px] text-ink-400 capitalize flex items-center gap-1 mt-0.5 font-mono">
+          <p className="text-[10px] text-ink-400 capitalize flex items-center gap-1 mt-1 font-mono">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
             Online
           </p>
