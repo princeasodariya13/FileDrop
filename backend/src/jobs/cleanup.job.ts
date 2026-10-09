@@ -16,39 +16,49 @@ export async function expireOverdueFiles(): Promise<number> {
   }).limit(200);
   let count = 0;
 
-  const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
+    const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
+    const { RoomModel } = await import("@/models/Room.model");
 
-  for (const file of overdue) {
-    // 1. Fresh check for active download sessions with unexpired leases
-    const activeSessions = await DownloadSessionModel.countDocuments({
-      fileId: file._id,
-      status: "active",
-      leaseUntil: { $gt: now }
-    });
-    if (activeSessions > 0) {
-      // Protect the file while download lease is active.
-      continue;
+    for (const file of overdue) {
+      // 1. Fresh check for active download sessions with unexpired leases
+      const [activeSessions, isUsedInActiveRoom] = await Promise.all([
+        DownloadSessionModel.countDocuments({
+          fileId: file._id,
+          status: "active",
+          leaseUntil: { $gt: now },
+        }),
+        RoomModel.exists({
+          "files.fileId": file.fileId,
+          status: "active",
+          expiresAt: { $gt: now },
+        }),
+      ]);
+
+      if (activeSessions > 0 || isUsedInActiveRoom) {
+        // Protect the file while download lease or room session is active.
+        continue;
+      }
+
+      try {
+        await storage.deleteObject(file.storageKey);
+      } catch (err) {
+        logger.error({ err, fileId: file.fileId }, "Cleanup: failed to delete storage object, will retry next run");
+        continue;
+      }
+
+      await releaseActiveStorage(file.sizeBytes);
+      file.status = "expired";
+      if (!file.inactivityTimerStartsAt) {
+        file.inactivityTimerStartsAt = file.createdAt || new Date();
+      }
+      await file.save();
+      count++;
+      logger.info({ fileId: file.fileId }, "File expired/deleted and cleaned up permanently from B2");
     }
 
-    try {
-      await storage.deleteObject(file.storageKey);
-    } catch (err) {
-      logger.error({ err, fileId: file.fileId }, "Cleanup: failed to delete storage object, will retry next run");
-      continue;
-    }
-
-    await releaseActiveStorage(file.sizeBytes);
-    file.status = "expired";
-    if (!file.inactivityTimerStartsAt) {
-      file.inactivityTimerStartsAt = file.createdAt || new Date();
-    }
-    await file.save();
-    count++;
-    logger.info({ fileId: file.fileId }, "File expired/deleted and cleaned up permanently from B2");
+    return count;
   }
 
-  return count;
-}
 
 export async function sweepAbandonedSessions(): Promise<number> {
   const { env } = await import("@/config/env");
@@ -139,6 +149,7 @@ export async function expireNoAccessFiles(): Promise<number> {
   const now = new Date();
   const staleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
   const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
+  const { RoomModel } = await import("@/models/Room.model");
 
   const overdue = await FileModel.find({
     status: "active",
@@ -151,14 +162,22 @@ export async function expireNoAccessFiles(): Promise<number> {
 
   let count = 0;
   for (const file of overdue) {
-    // FRESH CHECK: Are there any active download sessions with unexpired leases?
-    const activeSessions = await DownloadSessionModel.countDocuments({
-      fileId: file._id,
-      status: "active",
-      leaseUntil: { $gt: now }
-    });
-    if (activeSessions > 0) {
-      // Receiver started a download just in time. Skip deletion!
+    // FRESH CHECK: Are there any active download sessions or active rooms using this file?
+    const [activeSessions, isUsedInActiveRoom] = await Promise.all([
+      DownloadSessionModel.countDocuments({
+        fileId: file._id,
+        status: "active",
+        leaseUntil: { $gt: now },
+      }),
+      RoomModel.exists({
+        "files.fileId": file.fileId,
+        status: "active",
+        expiresAt: { $gt: now },
+      }),
+    ]);
+
+    if (activeSessions > 0 || isUsedInActiveRoom) {
+      // Protected by active download lease or live room
       continue;
     }
 
@@ -190,11 +209,28 @@ export async function expireNoAccessFiles(): Promise<number> {
 
 export async function sweepExpiredRooms(): Promise<number> {
   const { RoomModel } = await import("@/models/Room.model");
+  const { broadcastRoomClosed } = await import("@/services/socket.service");
   const now = new Date();
-  const res = await RoomModel.updateMany(
+
+  const expiredRooms = await RoomModel.find(
     { status: "active", expiresAt: { $lte: now } },
+    { roomCode: 1 }
+  ).limit(100);
+
+  if (expiredRooms.length === 0) return 0;
+
+  const roomCodes = expiredRooms.map((r) => r.roomCode);
+  const res = await RoomModel.updateMany(
+    { roomCode: { $in: roomCodes }, status: "active" },
     { $set: { status: "expired" } }
   );
+
+  for (const code of roomCodes) {
+    try {
+      broadcastRoomClosed(code, "expired");
+    } catch (e) {}
+  }
+
   return res.modifiedCount;
 }
 

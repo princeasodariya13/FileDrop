@@ -13,6 +13,14 @@ import storageRoutes from "@/routes/storage.routes";
 import cronRoutes from "@/routes/cron.routes";
 import roomRoutes from "@/routes/room.routes";
 
+function getCorsOrigin(): string | string[] | boolean {
+  if (!env.frontendOrigin || env.frontendOrigin === "*") return true;
+  if (env.frontendOrigin.includes(",")) {
+    return env.frontendOrigin.split(",").map((o) => o.trim());
+  }
+  return env.frontendOrigin;
+}
+
 export function createApp() {
   const app = express();
 
@@ -22,7 +30,7 @@ export function createApp() {
   app.use(helmet());
   app.use(
     cors({
-      origin: env.frontendOrigin,
+      origin: getCorsOrigin(),
       credentials: false,
     })
   );

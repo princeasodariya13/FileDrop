@@ -268,24 +268,40 @@ export async function deleteFile(req: Request, res: Response, next: NextFunction
     );
     if (!file) throw new ApiError(404, "FILE_NOT_FOUND", "This file is no longer available.");
 
-    // Check if there are active download leases
+    // Check if there are active download leases or active room attachments
     const { DownloadSessionModel } = await import("@/models/DownloadSession.model");
-    const activeSessions = await DownloadSessionModel.countDocuments({
-      fileId: file._id,
-      status: "active",
-      leaseUntil: { $gt: new Date() }
-    });
+    const { RoomModel } = await import("@/models/Room.model");
+    const now = new Date();
 
-    if (activeSessions === 0) {
+    const [activeSessions, isUsedInActiveRoom] = await Promise.all([
+      DownloadSessionModel.countDocuments({
+        fileId: file._id,
+        status: "active",
+        leaseUntil: { $gt: now },
+      }),
+      RoomModel.exists({
+        "files.fileId": file.fileId,
+        status: "active",
+        expiresAt: { $gt: now },
+      }),
+    ]);
+
+    if (activeSessions === 0 && !isUsedInActiveRoom) {
       // Immediate permanent delete from B2 storage
-      storage.deleteObject(file.storageKey).then(async () => {
-        const { releaseActiveStorage } = await import("@/services/storageReservation.service");
-        await releaseActiveStorage(file.sizeBytes);
-        file.status = "expired";
-        await file.save();
-      }).catch((err) => {
-        logger.warn({ err, fileId: file.fileId }, "Immediate B2 delete failed, will be retried by cleanup job");
-      });
+      storage
+        .deleteObject(file.storageKey)
+        .then(async () => {
+          const { releaseActiveStorage } = await import("@/services/storageReservation.service");
+          await releaseActiveStorage(file.sizeBytes);
+          file.status = "expired";
+          await file.save();
+        })
+        .catch((err) => {
+          logger.warn(
+            { err, fileId: file.fileId },
+            "Immediate B2 delete failed, will be retried by cleanup job"
+          );
+        });
     }
 
     return ok(res, { fileId: file.fileId, status: "deleted" });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import jsQR from "jsqr";
 import { useToast } from "@/components/ui/Toast";
@@ -11,6 +12,7 @@ interface QRScannerModalProps {
 }
 
 export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
+  const [mounted, setMounted] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -18,6 +20,10 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
   const animFrameRef = useRef<number | null>(null);
   const isScanningRef = useRef<boolean>(false);
   const scannedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const [hasCamera, setHasCamera] = useState<boolean | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -311,9 +317,9 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
@@ -520,6 +526,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -533,25 +533,38 @@ export function useConnectRoom(initialCode?: string) {
               headers: { "x-device-id": stored.deviceId },
             });
             const body = await res.json();
-            if (res.ok && body.success) {
-              setRoom({
-                roomCode: body.data.roomCode,
-                roomId: body.data.roomId,
-                status: body.data.status,
-                expiresAt: body.data.expiresAt,
-                lastActivityAt: body.data.lastActivityAt,
-                devices: body.data.devices,
-                files: body.data.files || [],
-              });
-              setDeviceId(stored.deviceId);
-              setDeviceToken(stored.deviceToken);
-              setIsHost(stored.isHost);
-              connectSocket(stored.roomCode, stored.deviceId, stored.deviceToken);
-              return;
+            if (res.ok && body.success && body.data) {
+              const currentDev = body.data.devices?.find(
+                (d: RoomDevice) => d.deviceId === stored.deviceId
+              );
+              if (currentDev) {
+                setRoom({
+                  roomCode: body.data.roomCode,
+                  roomId: body.data.roomId,
+                  status: body.data.status,
+                  expiresAt: body.data.expiresAt,
+                  lastActivityAt: body.data.lastActivityAt,
+                  devices: body.data.devices,
+                  files: body.data.files || [],
+                });
+                setDeviceId(stored.deviceId);
+                setDeviceToken(stored.deviceToken);
+                setIsHost(currentDev.isHost);
+                connectSocket(stored.roomCode, stored.deviceId, stored.deviceToken);
+                return;
+              }
             }
+            // If room not found, expired, or device removed, clear stale session
+            try {
+              sessionStorage.removeItem(SESSION_KEY);
+            } catch (e) {}
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        try {
+          sessionStorage.removeItem(SESSION_KEY);
+        } catch (err) {}
+      }
 
       // If initial code provided (e.g. from URL /room/123456)
       if (initialCode && /^\d{6}$/.test(initialCode.trim())) {

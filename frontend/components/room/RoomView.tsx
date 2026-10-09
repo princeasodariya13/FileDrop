@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { RoomState, RoomFile, RoomDevice } from "@/types/room";
 import { DeviceBadge } from "./DeviceBadge";
 import { Button } from "@/components/ui/Button";
@@ -43,10 +44,15 @@ export function RoomView({
   onRemoveDevice,
   onLeaveRoom,
 }: RoomViewProps) {
+  const [mounted, setMounted] = useState<boolean>(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState<boolean>(false);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Pending files selection state (files selected but not yet uploaded)
   const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
@@ -60,9 +66,22 @@ export function RoomView({
   const [deviceToRemove, setDeviceToRemove] = useState<{ deviceId: string; deviceName: string } | null>(null);
   const [isRemovingDevice, setIsRemovingDevice] = useState<boolean>(false);
 
-  // Leave room confirmation state
+  // Leave room state
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState<boolean>(false);
   const [isLeaving, setIsLeaving] = useState<boolean>(false);
+
+  // Prevent background scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(fileToDelete || deviceToRemove || isLeaveModalOpen || isQRModalOpen);
+    if (isAnyModalOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [fileToDelete, deviceToRemove, isLeaveModalOpen, isQRModalOpen]);
 
   const [siteUrl, setSiteUrl] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -487,7 +506,7 @@ export function RoomView({
       {pendingFiles.length > 0 && (
         <div
           ref={dropdownRef}
-          className="rounded-card p-5 border border-brand-500/30 bg-surface/80 backdrop-blur-xl shadow-xl space-y-4 animate-fade-in"
+          className="relative z-20 rounded-card p-5 border border-brand-500/30 bg-surface/80 backdrop-blur-xl shadow-xl space-y-4 animate-fade-in"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-surface pb-3">
             <div className="space-y-0.5">
@@ -524,7 +543,7 @@ export function RoomView({
             </div>
           </div>
 
-          <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+          <div className="space-y-2.5 max-h-96 overflow-y-auto no-scrollbar">
             {pendingFiles.map((item) => {
               const isDropdownOpen = activeDropdownId === item.id;
               const hasSpecificRecipients = item.recipientDeviceIds.length > 0;
@@ -543,7 +562,11 @@ export function RoomView({
               return (
                 <div
                   key={item.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-surface/60 border border-surface-hover hover:border-brand-500/20 transition-all"
+                  className={`relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl border transition-all ${
+                    isDropdownOpen
+                      ? "z-30 bg-surface/95 border-brand-500/50 shadow-xl ring-1 ring-brand-500/30"
+                      : "z-10 bg-surface/60 border-surface-hover hover:border-brand-500/20"
+                  }`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400">
@@ -601,7 +624,7 @@ export function RoomView({
 
                       {/* Recipient Dropdown Menu */}
                       {isDropdownOpen && (
-                        <div className="absolute right-0 sm:right-0 mt-1.5 w-64 rounded-2xl bg-surface/95 backdrop-blur-xl border border-surface-hover shadow-2xl p-2 z-30 space-y-1 animate-scale-up">
+                        <div className="absolute right-0 top-full mt-1.5 w-64 rounded-2xl bg-zinc-900/98 backdrop-blur-2xl border border-brand-500/30 shadow-2xl p-2.5 z-50 space-y-1 animate-scale-up ring-1 ring-black/40">
                           <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-ink-400">
                             Select Recipients
                           </div>
@@ -638,7 +661,7 @@ export function RoomView({
                               No other devices connected yet. When peers join, you can choose them directly.
                             </div>
                           ) : (
-                            <div className="space-y-0.5 max-h-40 overflow-y-auto">
+                            <div className="space-y-0.5 max-h-40 overflow-y-auto no-scrollbar">
                               {peerDevices.map((peer) => {
                                 const isChecked = item.recipientDeviceIds.includes(peer.deviceId);
                                 return (
@@ -903,11 +926,11 @@ export function RoomView({
       </div>
 
       {/* Delete Confirmation Modal */}
-      {fileToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl border border-red-500/30 bg-surface/95 p-6 shadow-2xl space-y-4 animate-scale-up">
+      {mounted && typeof document !== "undefined" && fileToDelete && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-sm rounded-3xl border border-red-500/30 bg-white dark:bg-[#13131a] p-6 shadow-2xl space-y-4 animate-scale-up ring-1 ring-black/5 dark:ring-white/10">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/20 text-red-400">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 dark:text-red-400">
                 <svg
                   width="20"
                   height="20"
@@ -922,20 +945,20 @@ export function RoomView({
                 </svg>
               </div>
               <div>
-                <h3 className="text-sm font-bold font-heading text-ink-50">Delete Shared File?</h3>
-                <p className="text-xs text-ink-400">This action cannot be undone.</p>
+                <h3 className="text-sm font-bold font-heading text-slate-900 dark:text-ink-50">Delete Shared File?</h3>
+                <p className="text-xs text-slate-500 dark:text-ink-400">This action cannot be undone.</p>
               </div>
             </div>
 
-            <p className="text-xs text-ink-300 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-ink-300 leading-relaxed">
               Are you sure you want to remove{" "}
-              <span className="font-semibold text-ink-50">"{fileToDelete.fileName}"</span> from the
+              <span className="font-semibold text-slate-900 dark:text-ink-50">"{fileToDelete.fileName}"</span> from the
               room? Connected devices will no longer be able to download it.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 disabled={isDeleting}
                 onClick={() => setFileToDelete(null)}
@@ -948,21 +971,22 @@ export function RoomView({
                 size="sm"
                 disabled={isDeleting}
                 onClick={confirmDeleteFile}
-                className="text-xs bg-red-600 hover:bg-red-700 text-white"
+                className="text-xs bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20"
               >
                 {isDeleting ? "Deleting..." : "Delete File"}
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Device Removal Confirmation Modal */}
-      {deviceToRemove && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl border border-red-500/30 bg-surface/95 p-6 shadow-2xl space-y-4 animate-scale-up">
+      {mounted && typeof document !== "undefined" && deviceToRemove && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-sm rounded-3xl border border-red-500/30 bg-white dark:bg-[#13131a] p-6 shadow-2xl space-y-4 animate-scale-up ring-1 ring-black/5 dark:ring-white/10">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/20 text-red-400">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 dark:text-red-400">
                 <svg
                   width="20"
                   height="20"
@@ -980,20 +1004,20 @@ export function RoomView({
                 </svg>
               </div>
               <div>
-                <h3 className="text-sm font-bold font-heading text-ink-50">Remove Device?</h3>
-                <p className="text-xs text-ink-400">Disconnect from live room</p>
+                <h3 className="text-sm font-bold font-heading text-slate-900 dark:text-ink-50">Remove Device?</h3>
+                <p className="text-xs text-slate-500 dark:text-ink-400">Disconnect from live room</p>
               </div>
             </div>
 
-            <p className="text-xs text-ink-300 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-ink-300 leading-relaxed">
               Are you sure you want to remove{" "}
-              <span className="font-semibold text-ink-50">"{deviceToRemove.deviceName}"</span> from
+              <span className="font-semibold text-slate-900 dark:text-ink-50">"{deviceToRemove.deviceName}"</span> from
               this room? It will be disconnected immediately and cannot reconnect using its current session.
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 disabled={isRemovingDevice}
                 onClick={() => setDeviceToRemove(null)}
@@ -1006,21 +1030,22 @@ export function RoomView({
                 size="sm"
                 disabled={isRemovingDevice}
                 onClick={confirmRemoveDevice}
-                className="text-xs bg-red-600 hover:bg-red-700 text-white"
+                className="text-xs bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20"
               >
                 {isRemovingDevice ? "Removing..." : "Remove Device"}
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Leave Room Confirmation Modal */}
-      {isLeaveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl border border-surface-hover bg-surface/95 p-6 shadow-2xl space-y-4 animate-scale-up">
+      {mounted && typeof document !== "undefined" && isLeaveModalOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-sm rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#13131a] p-6 shadow-2xl space-y-4 animate-scale-up ring-1 ring-black/5 dark:ring-white/10">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/20 text-red-400">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 dark:text-red-400">
                 <svg
                   width="20"
                   height="20"
@@ -1037,12 +1062,12 @@ export function RoomView({
                 </svg>
               </div>
               <div>
-                <h3 className="text-sm font-bold font-heading text-ink-50">Leave Live Room?</h3>
-                <p className="text-xs text-ink-400">Disconnect from #{room.roomCode}</p>
+                <h3 className="text-sm font-bold font-heading text-slate-900 dark:text-ink-50">Leave Live Room?</h3>
+                <p className="text-xs text-slate-500 dark:text-ink-400">Disconnect from #{room.roomCode}</p>
               </div>
             </div>
 
-            <p className="text-xs text-ink-300 leading-relaxed">
+            <p className="text-xs text-slate-600 dark:text-ink-300 leading-relaxed">
               {isHost && room.devices.length > 1 ? (
                 <>
                   You are the host. If you leave, host ownership will be automatically transferred to
@@ -1062,7 +1087,7 @@ export function RoomView({
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
                 disabled={isLeaving}
                 onClick={() => setIsLeaveModalOpen(false)}
@@ -1075,13 +1100,14 @@ export function RoomView({
                 size="sm"
                 disabled={isLeaving}
                 onClick={handleConfirmLeave}
-                className="text-xs bg-red-600 hover:bg-red-700 text-white"
+                className="text-xs bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-600/20"
               >
                 {isLeaving ? "Leaving..." : "Leave Room"}
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Room QR Code Modal */}

@@ -1214,4 +1214,80 @@ describe("Connect Devices Room Endpoints & Foundation", () => {
       expect(roomInDb?.devices.length).toBe(0);
     });
   });
+
+  describe("Cross-Workflow Safe File Deletion & Background Cleanup", () => {
+    it("preserves storage object and defer deletion when Quick Share file is deleted while active in a room", async () => {
+      // 1. Create file in FileModel
+      const file = await FileModel.create({
+        fileId: "shared-cross-flow-file",
+        code: "998877",
+        originalName: "shared-doc.pdf",
+        sanitizedName: "shared-doc.pdf",
+        sizeBytes: 8192,
+        mimeType: "application/pdf",
+        storageKey: "files/shared-cross-flow-file/shared-doc.pdf",
+        possessionToken: "qs-owner-token",
+        status: "active",
+        expiresAt: new Date(Date.now() + 3600000),
+        inactivityTimerStartsAt: new Date(),
+      });
+
+      // 2. Create room and attach the file
+      const createRes = await fetch(`${baseUrl}/api/rooms/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceName: "Room Host" }),
+      });
+      const { data: roomData } = (await createRes.json()) as any;
+
+      await fetch(`${baseUrl}/api/rooms/${roomData.roomCode}/files`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": roomData.deviceId,
+          "x-device-token": roomData.deviceToken,
+        },
+        body: JSON.stringify({
+          fileId: file.fileId,
+          possessionToken: file.possessionToken,
+        }),
+      });
+
+      // 3. Quick Share owner deletes the file via DELETE /api/files/:fileId
+      const deleteQsRes = await fetch(`${baseUrl}/api/files/${file.fileId}`, {
+        method: "DELETE",
+        headers: {
+          "x-possession-token": file.possessionToken,
+        },
+      });
+      expect(deleteQsRes.status).toBe(200);
+
+      // Status in FileModel is "deleted" for Quick Share lookup
+      const fileAfterDelete = await FileModel.findOne({ fileId: file.fileId });
+      expect(fileAfterDelete?.status).toBe("deleted");
+
+      // 4. Background cleanup job `expireOverdueFiles` should NOT delete B2 storage because it is still used in active room
+      const { expireOverdueFiles } = await import("@/jobs/cleanup.job");
+      const cleanedCount = await expireOverdueFiles();
+      expect(cleanedCount).toBe(0);
+
+      // 5. Room participants can still download the file via room download API
+      const roomDlRes = await fetch(
+        `${baseUrl}/api/rooms/${roomData.roomCode}/files/${file.fileId}/download`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-device-id": roomData.deviceId,
+            "x-device-token": roomData.deviceToken,
+          },
+        }
+      );
+      expect(roomDlRes.status).toBe(200);
+      const roomDlJson = (await roomDlRes.json()) as any;
+      expect(roomDlJson.success).toBe(true);
+      expect(roomDlJson.data.downloadUrl).toBeDefined();
+    });
+  });
 });
+

@@ -53,7 +53,7 @@ async function syncRoomFiles(
   const fileIds = room.files.map((f) => f.fileId);
   const activeDbFiles = await FileModel.find({
     fileId: { $in: fileIds },
-    status: "active",
+    status: { $in: ["active", "deleted"] },
     expiresAt: { $gt: now },
   }).select("fileId");
 
@@ -469,7 +469,7 @@ export async function downloadRoomFile(req: Request, res: Response, next: NextFu
     // Verify file in FileModel
     const file = await FileModel.findOne({
       fileId,
-      status: "active",
+      status: { $in: ["active", "deleted"] },
       expiresAt: { $gt: now },
     });
 

@@ -87,5 +87,7 @@ const RoomSchema = new Schema<IRoom>(
 );
 
 RoomSchema.index({ status: 1, expiresAt: 1 });
+RoomSchema.index({ "devices.deviceId": 1 });
+RoomSchema.index({ "files.fileId": 1 });
 
 export const RoomModel = model<IRoom>("Room", RoomSchema);

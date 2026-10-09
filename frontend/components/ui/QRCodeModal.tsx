@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import QRCode from "qrcode";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
@@ -22,10 +23,15 @@ export function QRCodeModal({
   subtitle,
   code,
 }: QRCodeModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(true);
   const { push } = useToast();
   const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!isOpen || !url) return;
@@ -62,7 +68,7 @@ export function QRCodeModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
   const handleCopyLink = async () => {
     try {
@@ -73,9 +79,9 @@ export function QRCodeModal({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-white/30 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -85,13 +91,13 @@ export function QRCodeModal({
     >
       <div
         ref={modalRef}
-        className="relative w-full max-w-sm rounded-3xl bg-bg-panel border border-brand-500/30 p-6 sm:p-7 shadow-[0_10px_40px_rgba(0,0,0,0.15)] animate-fade-in-scale space-y-5 text-center"
+        className="relative w-full max-w-sm rounded-3xl bg-white dark:bg-[#13131a] border border-slate-200 dark:border-brand-500/30 p-6 sm:p-7 shadow-2xl animate-fade-in-scale space-y-5 text-center ring-1 ring-black/5 dark:ring-white/10"
       >
         {/* Close Button */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 h-8 w-8 rounded-full bg-surface border border-surface-hover flex items-center justify-center text-ink-400 hover:text-ink-50 hover:bg-surface-hover transition-colors"
+          className="absolute top-4 right-4 h-8 w-8 rounded-full bg-slate-100 dark:bg-surface border border-slate-200 dark:border-surface-hover flex items-center justify-center text-slate-500 dark:text-ink-400 hover:text-slate-900 dark:hover:text-ink-50 hover:bg-slate-200 dark:hover:bg-surface-hover transition-colors"
           aria-label="Close QR modal"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -102,7 +108,7 @@ export function QRCodeModal({
 
         {/* Modal Header */}
         <div className="space-y-1 pr-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-300 text-[11px] font-semibold uppercase tracking-wider">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-500 dark:text-brand-300 text-[11px] font-semibold uppercase tracking-wider">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" />
               <rect x="14" y="3" width="7" height="7" />
@@ -111,12 +117,12 @@ export function QRCodeModal({
             </svg>
             <span>Scan to Download</span>
           </div>
-          <h3 className="text-base font-bold text-ink-50 truncate font-heading">{title}</h3>
-          {subtitle && <p className="text-xs text-ink-400 font-mono">{subtitle}</p>}
+          <h3 className="text-base font-bold text-slate-900 dark:text-ink-50 truncate font-heading">{title}</h3>
+          {subtitle && <p className="text-xs text-slate-500 dark:text-ink-400 font-mono">{subtitle}</p>}
         </div>
 
         {/* QR Code Canvas / Image Container */}
-        <div className="relative mx-auto flex items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-brand-500/20 aspect-square max-w-[240px]">
+        <div className="relative mx-auto flex items-center justify-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200 dark:border-brand-500/20 aspect-square max-w-[240px]">
           {isGenerating ? (
             <div className="flex flex-col items-center gap-2 text-ink-600 animate-pulse">
               <svg className="animate-spin h-6 w-6 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -143,7 +149,7 @@ export function QRCodeModal({
           </div>
         )}
 
-        <p className="text-[11px] text-ink-400 leading-tight">
+        <p className="text-[11px] text-slate-500 dark:text-ink-400 leading-tight">
           Point any smartphone camera at the QR code to instantly open and download this file.
         </p>
 
@@ -152,7 +158,7 @@ export function QRCodeModal({
           <Button
             size="sm"
             onClick={handleCopyLink}
-            className="w-full text-xs py-2.5 bg-btn-primary text-white font-medium"
+            className="w-full text-xs py-2.5 bg-btn-primary text-white font-medium shadow-md shadow-brand-500/20"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1.5 shrink-0">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -162,7 +168,8 @@ export function QRCodeModal({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
