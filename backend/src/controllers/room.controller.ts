@@ -241,10 +241,7 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
     const now = new Date();
 
     const activeRoomsList = await RoomModel.find({
-      $or: [
-        { creatorIpHash: ipHash },
-        { "devices.ipHash": ipHash },
-      ],
+      "devices.ipHash": ipHash,
       status: "active",
       expiresAt: { $gt: now },
     }).sort({ lastActivityAt: -1 });
@@ -254,26 +251,27 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
     }
 
     const activeRooms = await Promise.all(
-      activeRoomsList.map(async (r) => {
-        const synced = await syncRoomFiles(r);
-        const myDev = r.devices.find((d) => d.ipHash === ipHash);
-        const isCreator = r.creatorIpHash === ipHash;
-        return {
-          roomCode: r.roomCode,
-          roomId: r.roomId,
-          roomName: r.roomName || "Live Room",
-          status: r.status,
-          expiresAt: r.expiresAt,
-          lastActivityAt: r.lastActivityAt,
-          isHost: myDev ? myDev.isHost : isCreator,
-          deviceId: myDev?.deviceId,
-          participantCount: r.devices.length,
-          devicesCount: r.devices.length,
-          devices: sanitizeDevices(r.devices),
-          filesCount: synced.length,
-          files: synced,
-        };
-      })
+      activeRoomsList
+        .filter((r) => r.devices.some((d) => d.ipHash === ipHash))
+        .map(async (r) => {
+          const synced = await syncRoomFiles(r);
+          const myDev = r.devices.find((d) => d.ipHash === ipHash);
+          return {
+            roomCode: r.roomCode,
+            roomId: r.roomId,
+            roomName: r.roomName || "Live Room",
+            status: r.status,
+            expiresAt: r.expiresAt,
+            lastActivityAt: r.lastActivityAt,
+            isHost: myDev ? myDev.isHost : false,
+            deviceId: myDev?.deviceId,
+            participantCount: r.devices.length,
+            devicesCount: r.devices.length,
+            devices: sanitizeDevices(r.devices),
+            filesCount: synced.length,
+            files: synced,
+          };
+        })
     );
 
     return ok(res, {

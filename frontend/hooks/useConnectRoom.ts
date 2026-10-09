@@ -9,6 +9,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 const SESSIONS_MAP_KEY = "filedrop_active_room_sessions";
 const CURRENT_ROOM_KEY = "filedrop_current_room_code";
 const LEGACY_SESSION_KEY = "filedrop_active_room_session";
+const LEFT_ROOMS_KEY = "filedrop_left_room_codes";
 
 export interface StoredRoomSession {
   roomCode: string;
@@ -22,6 +23,46 @@ export interface StoredRoomSession {
 }
 
 export type StoredSessionsMap = Record<string, StoredRoomSession>;
+
+export function getLeftRoomCodes(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(LEFT_ROOMS_KEY) || sessionStorage.getItem(LEFT_ROOMS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed);
+    }
+  } catch {}
+  return new Set();
+}
+
+export function addLeftRoomCode(code: string) {
+  if (typeof window === "undefined" || !code) return;
+  try {
+    const set = getLeftRoomCodes();
+    set.add(code.trim());
+    const arr = Array.from(set);
+    localStorage.setItem(LEFT_ROOMS_KEY, JSON.stringify(arr));
+    try {
+      sessionStorage.setItem(LEFT_ROOMS_KEY, JSON.stringify(arr));
+    } catch {}
+  } catch {}
+}
+
+export function removeLeftRoomCode(code: string) {
+  if (typeof window === "undefined" || !code) return;
+  try {
+    const set = getLeftRoomCodes();
+    if (set.has(code.trim())) {
+      set.delete(code.trim());
+      const arr = Array.from(set);
+      localStorage.setItem(LEFT_ROOMS_KEY, JSON.stringify(arr));
+      try {
+        sessionStorage.setItem(LEFT_ROOMS_KEY, JSON.stringify(arr));
+      } catch {}
+    }
+  } catch {}
+}
 
 function getStoredSessionsMap(): StoredSessionsMap {
   if (typeof window === "undefined") return {};
@@ -153,7 +194,16 @@ export function useConnectRoom(initialCode?: string) {
 
   const refreshActiveRoomsList = useCallback(async () => {
     const localMap = getStoredSessionsMap();
-    const localCodes = Object.keys(localMap);
+    const leftCodes = getLeftRoomCodes();
+
+    // Clean up any left room codes from localMap
+    for (const leftCode of leftCodes) {
+      if (localMap[leftCode]) {
+        delete localMap[leftCode];
+      }
+    }
+
+    const localCodes = Object.keys(localMap).filter((c) => !leftCodes.has(c));
 
     // 1. Query server for all active rooms associated with this client/IP
     let serverRooms: any[] = [];
@@ -161,7 +211,9 @@ export function useConnectRoom(initialCode?: string) {
       const lookupRes = await fetch(`${API_BASE}/api/rooms/active/lookup`);
       const lookupBody = await lookupRes.json();
       if (lookupRes.ok && lookupBody.success && Array.isArray(lookupBody.data?.activeRooms)) {
-        serverRooms = lookupBody.data.activeRooms;
+        serverRooms = lookupBody.data.activeRooms.filter(
+          (sr: any) => sr && sr.roomCode && !leftCodes.has(sr.roomCode)
+        );
       }
     } catch (err) {
       // Network blip; fall back to locally saved sessions
@@ -172,7 +224,7 @@ export function useConnectRoom(initialCode?: string) {
 
     // Populate from server lookup
     for (const sr of serverRooms) {
-      if (sr && sr.roomCode) {
+      if (sr && sr.roomCode && !leftCodes.has(sr.roomCode)) {
         const localSession = localMap[sr.roomCode];
         summariesMap[sr.roomCode] = {
           roomCode: sr.roomCode,
@@ -201,7 +253,7 @@ export function useConnectRoom(initialCode?: string) {
 
     // Populate / verify remaining local sessions
     for (const code of localCodes) {
-      if (summariesMap[code]) continue; // Already enriched from server
+      if (summariesMap[code] || leftCodes.has(code)) continue;
 
       const session = localMap[code];
       try {
@@ -583,6 +635,8 @@ export function useConnectRoom(initialCode?: string) {
         return [newSummary, ...filtered];
       });
 
+      removeLeftRoomCode(data.roomCode);
+
       connectSocket(data.roomCode, data.deviceId, data.deviceToken);
       refreshActiveRoomsList();
       push(`Room created! Code: ${data.roomCode} (${data.roomName || "Live Room"})`, "success");
@@ -669,6 +723,8 @@ export function useConnectRoom(initialCode?: string) {
         const filtered = prev.filter((r) => r.roomCode !== data.roomCode);
         return [newSummary, ...filtered];
       });
+
+      removeLeftRoomCode(cleanCode);
 
       connectSocket(data.roomCode, data.deviceId, data.deviceToken);
       refreshActiveRoomsList();
@@ -928,9 +984,13 @@ export function useConnectRoom(initialCode?: string) {
     const codeToLeave = targetRoomCode || currentRoomCode || room?.roomCode;
     if (!codeToLeave) return;
 
+    // 1. Mark as intentionally left so auto-reconnection will never restore it
+    addLeftRoomCode(codeToLeave);
+
     const map = getStoredSessionsMap();
     const session = map[codeToLeave];
 
+    // 2. Notify backend server to remove device / close room
     if (session) {
       try {
         const headers: Record<string, string> = {
@@ -941,23 +1001,23 @@ export function useConnectRoom(initialCode?: string) {
           headers["x-device-token"] = session.deviceToken;
         }
 
-        const res = await fetch(`${API_BASE}/api/rooms/${codeToLeave}/leave`, {
+        await fetch(`${API_BASE}/api/rooms/${codeToLeave}/leave`, {
           method: "POST",
           headers,
           body: JSON.stringify({ deviceId: session.deviceId }),
         });
-
-        const body = await res.json();
-        if (!res.ok || !body.success) {
-          console.warn("Leave room server warning:", body?.error?.message);
-        }
       } catch (e) {
         console.warn("Network error while notifying server of departure:", e);
       }
     }
 
+    // 3. Remove from local browser storage
     const nextActiveCode = removeStoredSession(codeToLeave);
 
+    // 4. Optimistically remove from activeRooms list
+    setActiveRooms((prev) => prev.filter((r) => r.roomCode !== codeToLeave));
+
+    // 5. If this was the active room in current view, disconnect and switch or clear
     if (codeToLeave === currentRoomCode || codeToLeave === room?.roomCode) {
       cleanupSocket();
       if (nextActiveCode) {
@@ -981,8 +1041,10 @@ export function useConnectRoom(initialCode?: string) {
 
     const restoreSessions = async () => {
       try {
+        const leftCodes = getLeftRoomCodes();
+
         // If initialCode specified (e.g. on /room/[code] direct page)
-        if (initialCode) {
+        if (initialCode && !leftCodes.has(initialCode)) {
           const map = getStoredSessionsMap();
           const session = map[initialCode];
           if (session && session.deviceId && session.deviceToken) {
@@ -1022,7 +1084,13 @@ export function useConnectRoom(initialCode?: string) {
 
         // Check stored session map
         const activeStored = getActiveStoredSession();
-        if (activeStored && activeStored.roomCode && activeStored.deviceId && activeStored.deviceToken) {
+        if (
+          activeStored &&
+          activeStored.roomCode &&
+          activeStored.deviceId &&
+          activeStored.deviceToken &&
+          !leftCodes.has(activeStored.roomCode)
+        ) {
           const res = await fetch(`${API_BASE}/api/rooms/${activeStored.roomCode}`, {
             headers: {
               "x-device-id": activeStored.deviceId,
@@ -1062,7 +1130,13 @@ export function useConnectRoom(initialCode?: string) {
         if (!initialCode) {
           const lookupRes = await fetch(`${API_BASE}/api/rooms/active/lookup`);
           const lookupBody = await lookupRes.json();
-          if (!isCancelled && lookupRes.ok && lookupBody.success && lookupBody.data?.activeRoom) {
+          if (
+            !isCancelled &&
+            lookupRes.ok &&
+            lookupBody.success &&
+            lookupBody.data?.activeRoom &&
+            !leftCodes.has(lookupBody.data.activeRoom.roomCode)
+          ) {
             const activeRoomData = lookupBody.data.activeRoom;
             const existingNames = (activeRoomData.devices || []).map((d: any) => d.deviceName);
             const { deviceName, deviceType } = getSmartDeviceName(existingNames);
