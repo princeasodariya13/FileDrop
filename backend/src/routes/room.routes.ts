@@ -3,6 +3,7 @@ import {
   createRoom,
   joinRoom,
   getActiveRoomForClient,
+  getUserActiveRooms,
   getRoomState,
   getRoomFiles,
   addFileToRoom,
@@ -29,6 +30,9 @@ router.post("/join", roomCodeGuessLimiter, joinRoom);
 // Cross-browser active room auto-lookup
 router.get("/active/lookup", getActiveRoomForClient);
 router.get("/active-client", getActiveRoomForClient);
+
+// Fetch and validate user's active rooms
+router.post("/user-active-rooms", getUserActiveRooms);
 
 // Room State & File Operations
 router.get("/:code", roomCodeGuessLimiter, getRoomState);

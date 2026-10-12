@@ -285,6 +285,95 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
 }
 
 /**
+ * POST /api/rooms/user-active-rooms — Fetch and validate all active rooms for a user across multiple sessions
+ * Request body: { sessions: Array<{ roomCode: string; deviceId: string; deviceToken: string }> }
+ */
+export async function getUserActiveRooms(req: Request, res: Response, next: NextFunction) {
+  try {
+    const sessions = req.body?.sessions;
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      return ok(res, { activeRooms: [], removedRoomCodes: [] });
+    }
+
+    const now = new Date();
+    const codes = Array.from(
+      new Set(
+        sessions
+          .map((s: any) => (typeof s?.roomCode === "string" ? s.roomCode.trim() : ""))
+          .filter(Boolean)
+      )
+    );
+
+    if (codes.length === 0) {
+      return ok(res, { activeRooms: [], removedRoomCodes: [] });
+    }
+
+    const rooms = await RoomModel.find({
+      roomCode: { $in: codes },
+      status: "active",
+      expiresAt: { $gt: now },
+    });
+
+    const roomByCode = new Map(rooms.map((r) => [r.roomCode, r]));
+    const activeRooms: any[] = [];
+    const removedRoomCodes: string[] = [];
+
+    for (const session of sessions) {
+      const code = typeof session?.roomCode === "string" ? session.roomCode.trim() : "";
+      if (!code) continue;
+
+      const room = roomByCode.get(code);
+      if (!room) {
+        removedRoomCodes.push(code);
+        continue;
+      }
+
+      // Verify that this user's device is an active member with matching credentials
+      const userDevice = room.devices.find(
+        (d) => d.deviceId === session.deviceId && d.deviceToken === session.deviceToken
+      );
+
+      if (!userDevice) {
+        removedRoomCodes.push(code);
+        continue;
+      }
+
+      // Touch device last seen
+      userDevice.lastSeenAt = now;
+      await RoomModel.updateOne(
+        { _id: room._id, "devices.deviceId": session.deviceId },
+        { $set: { "devices.$.lastSeenAt": now } }
+      );
+
+      const syncedFiles = await syncRoomFiles(room, session.deviceId);
+
+      activeRooms.push({
+        roomCode: room.roomCode,
+        roomId: room.roomId,
+        roomName: room.roomName || "Live Room",
+        status: room.status,
+        expiresAt: room.expiresAt,
+        lastActivityAt: room.lastActivityAt,
+        isHost: userDevice.isHost,
+        deviceId: userDevice.deviceId,
+        participantCount: room.devices.length,
+        devicesCount: room.devices.length,
+        devices: sanitizeDevices(room.devices),
+        filesCount: syncedFiles.length,
+        files: syncedFiles,
+      });
+    }
+
+    return ok(res, {
+      activeRooms,
+      removedRoomCodes: Array.from(new Set(removedRoomCodes)),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
  * GET /api/rooms/:code — Retrieve current room state (devices, files, expiry)
  */
 export async function getRoomState(req: Request, res: Response, next: NextFunction) {
@@ -663,6 +752,16 @@ export async function leaveRoom(req: Request, res: Response, next: NextFunction)
     }
 
     room.devices = remainingDevices;
+
+    // Clean up any recipient references to leaving device
+    if (room.files && room.files.length > 0) {
+      room.files.forEach((file) => {
+        if (file.recipientDeviceIds && file.recipientDeviceIds.includes(callerDeviceId)) {
+          file.recipientDeviceIds = file.recipientDeviceIds.filter((id) => id !== callerDeviceId);
+        }
+      });
+    }
+
     room.lastActivityAt = now;
     await room.save();
 
@@ -953,6 +1052,16 @@ export async function removeRoomDevice(req: Request, res: Response, next: NextFu
 
     // Remove device from room.devices
     room.devices.splice(targetDeviceIndex, 1);
+
+    // Clean up any recipient references to this removed device in room files
+    if (room.files && room.files.length > 0) {
+      room.files.forEach((file) => {
+        if (file.recipientDeviceIds && file.recipientDeviceIds.includes(targetDeviceId)) {
+          file.recipientDeviceIds = file.recipientDeviceIds.filter((id) => id !== targetDeviceId);
+        }
+      });
+    }
+
     room.lastActivityAt = now;
     await room.save();
 

@@ -267,74 +267,91 @@ export function useConnectRoom(initialCode?: string) {
     // Set initial summaries immediately without waiting for network
     if (Object.keys(summariesMap).length > 0) {
       setActiveRooms(Object.values(summariesMap));
+    } else {
+      setActiveRooms([]);
+      return;
     }
 
-    // Concurrently validate stored rooms with the server using their own device credentials
-    await Promise.allSettled(
-      localCodes.map(async (code) => {
-        if (leftCodes.has(code)) return;
-        const session = localMap[code];
-        try {
-          const res = await fetch(`${API_BASE}/api/rooms/${code}`, {
-            headers: {
-              "x-device-id": session.deviceId,
-              "x-device-token": session.deviceToken,
-            },
-          });
-          const body = await res.json();
-          if (res.ok && body.success && body.data) {
-            const rData = body.data;
-            const currentDev = rData.devices?.find((d: any) => d.deviceId === session.deviceId);
-            if (!currentDev) {
-              // Device was removed from the room by host
-              delete localMap[code];
-              removeCachedRoomState(code);
-              delete summariesMap[code];
-              return;
-            }
+    if (localCodes.length === 0) {
+      setActiveRooms([]);
+      return;
+    }
 
-            summariesMap[code] = {
-              roomCode: code,
-              roomId: rData.roomId || session.roomId || "",
-              roomName: rData.roomName || session.roomName || "Live Room",
-              isHost: currentDev.isHost ?? session.isHost,
-              deviceId: session.deviceId,
-              participantCount: rData.devices?.length || 1,
-              filesCount: rData.files?.length || 0,
-              status: rData.status || "active",
-              expiresAt: rData.expiresAt,
-              lastActivityAt: rData.lastActivityAt,
-            };
-
-            localMap[code] = {
-              ...session,
-              roomId: rData.roomId || session.roomId,
-              roomName: rData.roomName || session.roomName,
-              isHost: currentDev.isHost ?? session.isHost,
-            };
-          } else if (
-            res.status === 404 ||
-            res.status === 401 ||
-            res.status === 403 ||
-            body?.error?.code === "ROOM_NOT_FOUND"
-          ) {
-            delete localMap[code];
-            removeCachedRoomState(code);
-            delete summariesMap[code];
-          }
-        } catch {
-          // Keep existing optimistic stub on network blip
-        }
-      })
-    );
-
-    // Save pruned / updated map to localStorage
+    // Single unified database query validating all active rooms for this device
     try {
-      localStorage.setItem(SESSIONS_MAP_KEY, JSON.stringify(localMap));
-    } catch {}
+      const sessionsPayload = localCodes.map((code) => ({
+        roomCode: code,
+        deviceId: localMap[code].deviceId,
+        deviceToken: localMap[code].deviceToken,
+      }));
 
-    const allSummaries = Object.values(summariesMap);
-    setActiveRooms(allSummaries);
+      const res = await fetch(`${API_BASE}/api/rooms/user-active-rooms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessions: sessionsPayload }),
+      });
+
+      const body = await res.json();
+      if (res.ok && body.success && body.data) {
+        const { activeRooms: verifiedRooms = [], removedRoomCodes = [] } = body.data;
+
+        // Prune removed or expired rooms
+        for (const rmCode of removedRoomCodes) {
+          delete localMap[rmCode];
+          removeStoredSession(rmCode);
+          removeCachedRoomState(rmCode);
+          addLeftRoomCode(rmCode);
+          delete summariesMap[rmCode];
+        }
+
+        // Update verified rooms
+        for (const vRoom of verifiedRooms) {
+          const code = vRoom.roomCode;
+          summariesMap[code] = {
+            roomCode: code,
+            roomId: vRoom.roomId,
+            roomName: vRoom.roomName || "Live Room",
+            isHost: vRoom.isHost,
+            deviceId: vRoom.deviceId,
+            participantCount: vRoom.participantCount || vRoom.devices?.length || 1,
+            filesCount: vRoom.filesCount || vRoom.files?.length || 0,
+            status: vRoom.status || "active",
+            expiresAt: vRoom.expiresAt,
+            lastActivityAt: vRoom.lastActivityAt,
+          };
+
+          if (localMap[code]) {
+            localMap[code] = {
+              ...localMap[code],
+              roomId: vRoom.roomId,
+              roomName: vRoom.roomName,
+              isHost: vRoom.isHost,
+            };
+          }
+
+          // Cache room state for 0ms rendering
+          saveCachedRoomState({
+            roomCode: code,
+            roomId: vRoom.roomId,
+            roomName: vRoom.roomName,
+            status: vRoom.status,
+            expiresAt: vRoom.expiresAt,
+            lastActivityAt: vRoom.lastActivityAt,
+            devices: vRoom.devices,
+            files: vRoom.files || [],
+          });
+        }
+
+        // Save updated localMap to localStorage
+        try {
+          localStorage.setItem(SESSIONS_MAP_KEY, JSON.stringify(localMap));
+        } catch {}
+
+        setActiveRooms(Object.values(summariesMap));
+      }
+    } catch {
+      // Keep optimistic summaries on network blip
+    }
   }, []);
 
   const connectSocket = useCallback((code: string, dId: string, dToken: string) => {
@@ -525,14 +542,8 @@ export function useConnectRoom(initialCode?: string) {
     const session = map[cleanCode];
 
     if (!session) {
-      // If credentials for this room don't exist in this browser, auto-join it
-      try {
-        await joinRoom(cleanCode);
-        return;
-      } catch (err: any) {
-        push("Could not connect to room " + cleanCode, "error");
-        return;
-      }
+      push("You are not connected to room #" + cleanCode + ". Please enter the code to join.", "error");
+      return;
     }
 
     setIsConnecting(true);
