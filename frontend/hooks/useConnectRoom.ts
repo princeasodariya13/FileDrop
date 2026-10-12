@@ -10,6 +10,38 @@ const SESSIONS_MAP_KEY = "filedrop_active_room_sessions";
 const CURRENT_ROOM_KEY = "filedrop_current_room_code";
 const LEGACY_SESSION_KEY = "filedrop_active_room_session";
 const LEFT_ROOMS_KEY = "filedrop_left_room_codes";
+const ROOM_CACHE_KEY_PREFIX = "filedrop_cached_room_state_";
+
+export function getCachedRoomState(roomCode: string): RoomState | null {
+  if (typeof window === "undefined" || !roomCode) return null;
+  try {
+    const raw = localStorage.getItem(`${ROOM_CACHE_KEY_PREFIX}${roomCode}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.roomCode === roomCode && Array.isArray(parsed.devices)) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export function saveCachedRoomState(roomState: RoomState) {
+  if (typeof window === "undefined" || !roomState?.roomCode) return;
+  try {
+    localStorage.setItem(
+      `${ROOM_CACHE_KEY_PREFIX}${roomState.roomCode}`,
+      JSON.stringify(roomState)
+    );
+  } catch {}
+}
+
+export function removeCachedRoomState(roomCode: string) {
+  if (typeof window === "undefined" || !roomCode) return;
+  try {
+    localStorage.removeItem(`${ROOM_CACHE_KEY_PREFIX}${roomCode}`);
+  } catch {}
+}
 
 export interface StoredRoomSession {
   roomCode: string;
@@ -192,6 +224,13 @@ export function useConnectRoom(initialCode?: string) {
     setIsConnected(false);
   }, []);
 
+  // Keep cached room state updated in localStorage whenever room changes
+  useEffect(() => {
+    if (room && room.roomCode) {
+      saveCachedRoomState(room);
+    }
+  }, [room]);
+
   const refreshActiveRoomsList = useCallback(async () => {
     const localMap = getStoredSessionsMap();
     const leftCodes = getLeftRoomCodes();
@@ -205,7 +244,32 @@ export function useConnectRoom(initialCode?: string) {
 
     const localCodes = Object.keys(localMap).filter((c) => !leftCodes.has(c));
 
-    // 1. Query server for all active rooms associated with this client/IP
+    // Optimistically populate summaries immediately from local storage and cached room states (0ms)
+    const summariesMap: Record<string, RoomSummary> = {};
+    for (const code of localCodes) {
+      if (leftCodes.has(code)) continue;
+      const session = localMap[code];
+      const cached = getCachedRoomState(code);
+      summariesMap[code] = {
+        roomCode: code,
+        roomId: cached?.roomId || session.roomId || "",
+        roomName: cached?.roomName || session.roomName || "Live Room",
+        isHost: session.isHost,
+        deviceId: session.deviceId,
+        participantCount: cached?.devices?.length || 1,
+        filesCount: cached?.files?.length || 0,
+        status: cached?.status || "active",
+        expiresAt: cached?.expiresAt,
+        lastActivityAt: session.lastActiveAt || cached?.lastActivityAt,
+      };
+    }
+
+    // Set initial summaries immediately without waiting for network
+    if (Object.keys(summariesMap).length > 0) {
+      setActiveRooms(Object.values(summariesMap));
+    }
+
+    // 1. Query server for active rooms associated with this client/IP
     let serverRooms: any[] = [];
     try {
       const lookupRes = await fetch(`${API_BASE}/api/rooms/active/lookup`);
@@ -219,10 +283,7 @@ export function useConnectRoom(initialCode?: string) {
       // Network blip; fall back to locally saved sessions
     }
 
-    // 2. Fetch individual room states for any local session not covered or to refresh details
-    const summariesMap: Record<string, RoomSummary> = {};
-
-    // Populate from server lookup
+    // Update summaries from server lookup
     for (const sr of serverRooms) {
       if (sr && sr.roomCode && !leftCodes.has(sr.roomCode)) {
         const localSession = localMap[sr.roomCode];
@@ -239,7 +300,6 @@ export function useConnectRoom(initialCode?: string) {
           lastActivityAt: sr.lastActivityAt,
         };
 
-        // If this room has a local session, ensure its roomName / roomId are updated in local storage
         if (localSession) {
           localMap[sr.roomCode] = {
             ...localSession,
@@ -251,62 +311,48 @@ export function useConnectRoom(initialCode?: string) {
       }
     }
 
-    // Populate / verify remaining local sessions
-    for (const code of localCodes) {
-      if (summariesMap[code] || leftCodes.has(code)) continue;
+    // 2. Fetch individual room states for any local session not covered by lookup concurrently in parallel
+    const remainingCodes = localCodes.filter(
+      (code) => !serverRooms.some((sr: any) => sr && sr.roomCode === code)
+    );
 
-      const session = localMap[code];
-      try {
-        const res = await fetch(`${API_BASE}/api/rooms/${code}`, {
-          headers: {
-            "x-device-id": session.deviceId,
-            "x-device-token": session.deviceToken,
-          },
-        });
-        const body = await res.json();
-        if (res.ok && body.success && body.data) {
-          const rData = body.data;
-          summariesMap[code] = {
-            roomCode: code,
-            roomId: rData.roomId || session.roomId || "",
-            roomName: rData.roomName || session.roomName || "Live Room",
-            isHost: session.isHost,
-            deviceId: session.deviceId,
-            participantCount: rData.devices?.length || 1,
-            filesCount: rData.files?.length || 0,
-            status: rData.status || "active",
-            expiresAt: rData.expiresAt,
-            lastActivityAt: rData.lastActivityAt,
-          };
-        } else if (res.status === 404 || body?.error?.code === "ROOM_NOT_FOUND") {
-          // Room expired or closed on server — prune from local storage
-          delete localMap[code];
-        } else {
-          // Temporary server error, keep session stub
-          summariesMap[code] = {
-            roomCode: code,
-            roomId: session.roomId || "",
-            roomName: session.roomName || "Live Room",
-            isHost: session.isHost,
-            deviceId: session.deviceId,
-            participantCount: 1,
-            filesCount: 0,
-            status: "active",
-          };
-        }
-      } catch {
-        // Network error, keep existing local session stub
-        summariesMap[code] = {
-          roomCode: code,
-          roomId: session.roomId || "",
-          roomName: session.roomName || "Live Room",
-          isHost: session.isHost,
-          deviceId: session.deviceId,
-          participantCount: 1,
-          filesCount: 0,
-          status: "active",
-        };
-      }
+    if (remainingCodes.length > 0) {
+      await Promise.allSettled(
+        remainingCodes.map(async (code) => {
+          if (leftCodes.has(code)) return;
+          const session = localMap[code];
+          try {
+            const res = await fetch(`${API_BASE}/api/rooms/${code}`, {
+              headers: {
+                "x-device-id": session.deviceId,
+                "x-device-token": session.deviceToken,
+              },
+            });
+            const body = await res.json();
+            if (res.ok && body.success && body.data) {
+              const rData = body.data;
+              summariesMap[code] = {
+                roomCode: code,
+                roomId: rData.roomId || session.roomId || "",
+                roomName: rData.roomName || session.roomName || "Live Room",
+                isHost: session.isHost,
+                deviceId: session.deviceId,
+                participantCount: rData.devices?.length || 1,
+                filesCount: rData.files?.length || 0,
+                status: rData.status || "active",
+                expiresAt: rData.expiresAt,
+                lastActivityAt: rData.lastActivityAt,
+              };
+            } else if (res.status === 404 || body?.error?.code === "ROOM_NOT_FOUND") {
+              delete localMap[code];
+              removeCachedRoomState(code);
+              delete summariesMap[code];
+            }
+          } catch {
+            // Keep existing optimistic stub on network blip
+          }
+        })
+      );
     }
 
     // Save pruned / updated map to localStorage
@@ -511,7 +557,18 @@ export function useConnectRoom(initialCode?: string) {
 
     setIsConnecting(true);
     setError(null);
-    cleanupSocket();
+
+    // Optimistically switch to cached room state immediately (0ms visual delay)
+    const cached = getCachedRoomState(cleanCode);
+    if (cached) {
+      cleanupSocket();
+      setRoom(cached);
+      setDeviceId(session.deviceId);
+      setDeviceToken(session.deviceToken);
+      setIsHost(session.isHost);
+      setCurrentRoomCode(cleanCode);
+      connectSocket(cleanCode, session.deviceId, session.deviceToken);
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/rooms/${cleanCode}`, {
@@ -524,6 +581,7 @@ export function useConnectRoom(initialCode?: string) {
       const body = await res.json();
       if (!res.ok || !body.success || !body.data) {
         removeStoredSession(cleanCode);
+        removeCachedRoomState(cleanCode);
         throw new Error(body?.error?.message || "Room has expired or is no longer available.");
       }
 
@@ -1056,8 +1114,9 @@ export function useConnectRoom(initialCode?: string) {
       }
     }
 
-    // 3. Remove from local browser storage
+    // 3. Remove from local browser storage and cached room states
     const nextActiveCode = removeStoredSession(codeToLeave);
+    removeCachedRoomState(codeToLeave);
 
     // 4. Optimistically remove from activeRooms list
     setActiveRooms((prev) => prev.filter((r) => r.roomCode !== codeToLeave));
@@ -1080,160 +1139,219 @@ export function useConnectRoom(initialCode?: string) {
     push(`Left Room ${codeToLeave}`, "info");
   };
 
-  // Auto-restore sessions from localStorage or discover active rooms on this machine
+  // Instant session restoration from localStorage + non-blocking background network synchronization
   useEffect(() => {
     let isCancelled = false;
 
     const restoreSessions = async () => {
       try {
         const leftCodes = getLeftRoomCodes();
+        const map = getStoredSessionsMap();
 
-        // If initialCode specified (e.g. on /room/[code] direct page)
+        // 1. Clean up any left rooms from local sessions map
+        for (const leftCode of leftCodes) {
+          if (map[leftCode]) {
+            delete map[leftCode];
+          }
+        }
+
+        // 2. Immediately seed activeRooms from local sessions and cached room states (0ms delay)
+        const localCodes = Object.keys(map).filter((c) => !leftCodes.has(c));
+        const initialSummaries: RoomSummary[] = localCodes.map((code) => {
+          const s = map[code];
+          const cached = getCachedRoomState(code);
+          return {
+            roomCode: code,
+            roomId: s.roomId || cached?.roomId || "",
+            roomName: s.roomName || cached?.roomName || "Live Room",
+            isHost: s.isHost,
+            deviceId: s.deviceId,
+            participantCount: cached?.devices?.length || 1,
+            filesCount: cached?.files?.length || 0,
+            status: cached?.status || "active",
+            expiresAt: cached?.expiresAt,
+            lastActivityAt: s.lastActiveAt || cached?.lastActivityAt,
+          };
+        });
+        if (initialSummaries.length > 0) {
+          setActiveRooms(initialSummaries);
+        }
+
+        // 3. Determine if we have a target session to restore
+        let targetSession: StoredRoomSession | null = null;
         if (initialCode && !leftCodes.has(initialCode)) {
-          const map = getStoredSessionsMap();
-          const session = map[initialCode];
-          if (session && session.deviceId && session.deviceToken) {
-            const res = await fetch(`${API_BASE}/api/rooms/${initialCode}`, {
+          targetSession = map[initialCode] || null;
+        } else {
+          const activeStored = getActiveStoredSession();
+          if (activeStored && !leftCodes.has(activeStored.roomCode)) {
+            targetSession = activeStored;
+          }
+        }
+
+        if (
+          targetSession &&
+          targetSession.roomCode &&
+          targetSession.deviceId &&
+          targetSession.deviceToken
+        ) {
+          // Restore room optimistically from cache or session metadata INSTANTLY (sub-1ms)
+          const cachedRoom = getCachedRoomState(targetSession.roomCode);
+          const initialRoomState: RoomState = cachedRoom || {
+            roomCode: targetSession.roomCode,
+            roomId: targetSession.roomId || "",
+            roomName: targetSession.roomName || "Live Room",
+            status: "active",
+            expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+            lastActivityAt: new Date().toISOString(),
+            devices: [
+              {
+                deviceId: targetSession.deviceId,
+                deviceName: "My Device",
+                deviceType: "unknown",
+                joinedAt: new Date().toISOString(),
+                lastSeenAt: new Date().toISOString(),
+                isHost: targetSession.isHost,
+              },
+            ],
+            files: [],
+          };
+
+          setRoom(initialRoomState);
+          setDeviceId(targetSession.deviceId);
+          setDeviceToken(targetSession.deviceToken);
+          setIsHost(targetSession.isHost);
+          setCurrentRoomCode(targetSession.roomCode);
+          connectSocket(
+            targetSession.roomCode,
+            targetSession.deviceId,
+            targetSession.deviceToken
+          );
+
+          // Reveal UI immediately — NO WAITING FOR NETWORK!
+          setIsInitializing(false);
+
+          // Background revalidation with server (non-blocking)
+          try {
+            const res = await fetch(`${API_BASE}/api/rooms/${targetSession.roomCode}`, {
               headers: {
-                "x-device-id": session.deviceId,
-                "x-device-token": session.deviceToken,
+                "x-device-id": targetSession.deviceId,
+                "x-device-token": targetSession.deviceToken,
               },
             });
             const body = await res.json();
-            if (!isCancelled && res.ok && body.success && body.data) {
-              const currentDev = body.data.devices?.find(
-                (d: RoomDevice) => d.deviceId === session.deviceId
-              );
-              if (currentDev) {
-                setRoom({
-                  roomCode: body.data.roomCode,
-                  roomId: body.data.roomId,
-                  roomName: body.data.roomName || session.roomName || "Live Room",
-                  status: body.data.status,
-                  expiresAt: body.data.expiresAt,
-                  lastActivityAt: body.data.lastActivityAt,
-                  devices: body.data.devices,
-                  files: body.data.files || [],
-                });
-                setDeviceId(session.deviceId);
-                setDeviceToken(session.deviceToken);
-                setIsHost(currentDev.isHost);
-                setCurrentRoomCode(session.roomCode);
-                connectSocket(session.roomCode, session.deviceId, session.deviceToken);
+            if (!isCancelled) {
+              if (res.ok && body.success && body.data) {
+                const currentDev = body.data.devices?.find(
+                  (d: RoomDevice) => d.deviceId === targetSession!.deviceId
+                );
+                if (currentDev) {
+                  const refreshedRoom: RoomState = {
+                    roomCode: body.data.roomCode,
+                    roomId: body.data.roomId,
+                    roomName: body.data.roomName || targetSession.roomName || "Live Room",
+                    status: body.data.status,
+                    expiresAt: body.data.expiresAt,
+                    lastActivityAt: body.data.lastActivityAt,
+                    devices: body.data.devices,
+                    files: body.data.files || [],
+                  };
+                  setRoom(refreshedRoom);
+                  setIsHost(currentDev.isHost);
+                  saveCachedRoomState(refreshedRoom);
+                  refreshActiveRoomsList();
+                  return;
+                }
+              }
+
+              if (res.status === 404 || body?.error?.code === "ROOM_NOT_FOUND") {
+                // Room expired or deleted on server
+                removeStoredSession(targetSession.roomCode);
+                removeCachedRoomState(targetSession.roomCode);
+                setRoom(null);
+                setCurrentRoomCode(null);
+                cleanupSocket();
                 refreshActiveRoomsList();
-                return;
               }
             }
+          } catch (e) {
+            // Keep optimistic cached session on network blip
           }
+          return;
         }
 
-        // Check stored session map
-        const activeStored = getActiveStoredSession();
-        if (
-          activeStored &&
-          activeStored.roomCode &&
-          activeStored.deviceId &&
-          activeStored.deviceToken &&
-          !leftCodes.has(activeStored.roomCode)
-        ) {
-          const res = await fetch(`${API_BASE}/api/rooms/${activeStored.roomCode}`, {
-            headers: {
-              "x-device-id": activeStored.deviceId,
-              "x-device-token": activeStored.deviceToken,
-            },
-          });
-          const body = await res.json();
-          if (!isCancelled && res.ok && body.success && body.data) {
-            const currentDev = body.data.devices?.find(
-              (d: RoomDevice) => d.deviceId === activeStored.deviceId
-            );
-            if (currentDev) {
-              setRoom({
-                roomCode: body.data.roomCode,
-                roomId: body.data.roomId,
-                roomName: body.data.roomName || activeStored.roomName || "Live Room",
-                status: body.data.status,
-                expiresAt: body.data.expiresAt,
-                lastActivityAt: body.data.lastActivityAt,
-                devices: body.data.devices,
-                files: body.data.files || [],
-              });
-              setDeviceId(activeStored.deviceId);
-              setDeviceToken(activeStored.deviceToken);
-              setIsHost(currentDev.isHost);
-              setCurrentRoomCode(activeStored.roomCode);
-              connectSocket(activeStored.roomCode, activeStored.deviceId, activeStored.deviceToken);
-              refreshActiveRoomsList();
-              return;
-            }
-          }
-          // Active stored session was invalid/expired
-          removeStoredSession(activeStored.roomCode);
-        }
+        // 4. If no target session to restore:
+        // Reveal UI immediately so user sees Create / Join Room screen without any delay!
+        setIsInitializing(false);
 
-        // If no active stored session in this browser, check if an active room exists on this machine across browsers
+        // 5. In background, check if an active room exists on this machine across browsers
         if (!initialCode) {
-          const lookupRes = await fetch(`${API_BASE}/api/rooms/active/lookup`);
-          const lookupBody = await lookupRes.json();
-          if (
-            !isCancelled &&
-            lookupRes.ok &&
-            lookupBody.success &&
-            lookupBody.data?.activeRoom &&
-            !leftCodes.has(lookupBody.data.activeRoom.roomCode)
-          ) {
-            const activeRoomData = lookupBody.data.activeRoom;
-            const existingNames = (activeRoomData.devices || []).map((d: any) => d.deviceName);
-            const { deviceName, deviceType } = getSmartDeviceName(existingNames);
+          try {
+            const lookupRes = await fetch(`${API_BASE}/api/rooms/active/lookup`);
+            const lookupBody = await lookupRes.json();
+            if (
+              !isCancelled &&
+              lookupRes.ok &&
+              lookupBody.success &&
+              lookupBody.data?.activeRoom &&
+              !leftCodes.has(lookupBody.data.activeRoom.roomCode)
+            ) {
+              const activeRoomData = lookupBody.data.activeRoom;
+              const existingNames = (activeRoomData.devices || []).map(
+                (d: any) => d.deviceName
+              );
+              const { deviceName, deviceType } = getSmartDeviceName(existingNames);
 
-            const joinRes = await fetch(`${API_BASE}/api/rooms/join`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                code: activeRoomData.roomCode,
-                deviceName,
-                deviceType,
-              }),
-            });
-
-            const joinBody = await joinRes.json();
-            if (!isCancelled && joinRes.ok && joinBody.success && joinBody.data) {
-              const joined = joinBody.data;
-              setRoom({
-                roomCode: joined.roomCode,
-                roomId: joined.roomId,
-                roomName: joined.roomName || "Live Room",
-                status: joined.status,
-                expiresAt: joined.expiresAt,
-                lastActivityAt: new Date().toISOString(),
-                devices: joined.devices,
-                files: joined.files || [],
+              const joinRes = await fetch(`${API_BASE}/api/rooms/join`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  code: activeRoomData.roomCode,
+                  deviceName,
+                  deviceType,
+                }),
               });
-              setDeviceId(joined.deviceId);
-              setDeviceToken(joined.deviceToken);
-              setIsHost(joined.isHost || false);
-              setCurrentRoomCode(joined.roomCode);
 
-              saveStoredSession(
-                {
+              const joinBody = await joinRes.json();
+              if (!isCancelled && joinRes.ok && joinBody.success && joinBody.data) {
+                const joined = joinBody.data;
+                const joinedRoom: RoomState = {
                   roomCode: joined.roomCode,
                   roomId: joined.roomId,
                   roomName: joined.roomName || "Live Room",
-                  deviceId: joined.deviceId,
-                  deviceToken: joined.deviceToken,
-                  isHost: joined.isHost || false,
-                },
-                true
-              );
-
-              connectSocket(joined.roomCode, joined.deviceId, joined.deviceToken);
-              refreshActiveRoomsList();
-              push(`Connected to Room ${joined.roomCode} (${deviceName})`, "success");
+                  status: joined.status,
+                  expiresAt: joined.expiresAt,
+                  lastActivityAt: new Date().toISOString(),
+                  devices: joined.devices,
+                  files: joined.files || [],
+                };
+                setRoom(joinedRoom);
+                setDeviceId(joined.deviceId);
+                setDeviceToken(joined.deviceToken);
+                setIsHost(joined.isHost || false);
+                setCurrentRoomCode(joined.roomCode);
+                saveStoredSession(
+                  {
+                    roomCode: joined.roomCode,
+                    roomId: joined.roomId,
+                    roomName: joined.roomName || "Live Room",
+                    deviceId: joined.deviceId,
+                    deviceToken: joined.deviceToken,
+                    isHost: joined.isHost || false,
+                  },
+                  true
+                );
+                saveCachedRoomState(joinedRoom);
+                connectSocket(joined.roomCode, joined.deviceId, joined.deviceToken);
+                refreshActiveRoomsList();
+                push(`Connected to Room ${joined.roomCode} (${deviceName})`, "success");
+              }
             }
+          } catch (e) {
+            // Passive background discovery blip, ignore
           }
         }
       } catch (e) {
-        // Keep storage on network error so user isn't kicked out during blips
+        // Fallback
       } finally {
         if (!isCancelled) {
           setIsInitializing(false);

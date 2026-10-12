@@ -94,8 +94,7 @@ export function RoomView({
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState<boolean>(false);
   const [isLeaving, setIsLeaving] = useState<boolean>(false);
 
-  // Responsive mobile 3-dot action menus
-  const [isRoomMenuOpen, setIsRoomMenuOpen] = useState<boolean>(false);
+  // Responsive mobile file action menu
   const [activeFileMenuId, setActiveFileMenuId] = useState<string | null>(null);
 
   // Prevent background scroll when any modal is open
@@ -480,102 +479,79 @@ export function RoomView({
             </div>
           </div>
 
-          {/* Desktop Actions */}
-          <div className="hidden sm:flex items-center gap-2 shrink-0">
-            <Button variant="secondary" size="sm" onClick={copyInviteLink} className="text-xs">
+          {/* Direct Action Buttons: Copy Invite Link, Show QR, Leave Room */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={copyInviteLink}
+              className="text-xs py-1.5 px-2.5 sm:px-3"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mr-1.5 text-brand-400 shrink-0"
+              >
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
               {copiedLink ? "Link Copied!" : "Copy Link"}
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setIsQRModalOpen(true)} className="text-xs">
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsQRModalOpen(true)}
+              className="text-xs py-1.5 px-2.5 sm:px-3"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mr-1.5 text-brand-400 shrink-0"
+              >
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+              </svg>
               Show QR
             </Button>
+
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setIsLeaveModalOpen(true)}
-              className="text-xs hover:text-red-400 hover:bg-red-500/10"
+              className="text-xs py-1.5 px-2.5 sm:px-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
             >
-              Leave
-            </Button>
-          </div>
-
-          {/* Mobile Actions: Show QR + 3-Dot Menu */}
-          <div className="flex sm:hidden items-center gap-2 shrink-0">
-            <Button variant="secondary" size="sm" onClick={() => setIsQRModalOpen(true)} className="text-xs py-1.5 px-3">
-              Show QR
-            </Button>
-
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsRoomMenuOpen((prev) => !prev)}
-                className="p-2 rounded-xl text-ink-300 hover:text-ink-50 bg-surface hover:bg-surface-hover border border-surface-hover transition-colors"
-                title="More Room Actions"
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mr-1.5 shrink-0"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="1" />
-                  <circle cx="12" cy="5" r="1" />
-                  <circle cx="12" cy="19" r="1" />
-                </svg>
-              </button>
-
-              {isRoomMenuOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-[9990]"
-                    onClick={() => setIsRoomMenuOpen(false)}
-                  />
-                  <div className="absolute left-0 top-full mt-2 w-56 max-w-[calc(100vw-3rem)] rounded-2xl dropdown-card p-1.5 z-[9995] shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsRoomMenuOpen(false);
-                        copyInviteLink();
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400 shrink-0">
-                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                      </svg>
-                      <span className="truncate">{copiedLink ? "Link Copied!" : "Copy Invite Link"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsRoomMenuOpen(false);
-                        copyCode();
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400 shrink-0">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                      </svg>
-                      <span className="truncate">Copy Room #{room.roomCode}</span>
-                    </button>
-
-                    <div className="my-1 border-t border-surface" />
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsRoomMenuOpen(false);
-                        setIsLeaveModalOpen(true);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                        <polyline points="16 17 21 12 16 7" />
-                        <line x1="21" y1="12" x2="9" y2="12" />
-                      </svg>
-                      <span>Leave Room</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              Leave Room
+            </Button>
           </div>
         </div>
 
