@@ -269,91 +269,64 @@ export function useConnectRoom(initialCode?: string) {
       setActiveRooms(Object.values(summariesMap));
     }
 
-    // 1. Query server for active rooms associated with this client/IP
-    let serverRooms: any[] = [];
-    try {
-      const lookupRes = await fetch(`${API_BASE}/api/rooms/active/lookup`);
-      const lookupBody = await lookupRes.json();
-      if (lookupRes.ok && lookupBody.success && Array.isArray(lookupBody.data?.activeRooms)) {
-        serverRooms = lookupBody.data.activeRooms.filter(
-          (sr: any) => sr && sr.roomCode && !leftCodes.has(sr.roomCode)
-        );
-      }
-    } catch (err) {
-      // Network blip; fall back to locally saved sessions
-    }
-
-    // Update summaries from server lookup
-    for (const sr of serverRooms) {
-      if (sr && sr.roomCode && !leftCodes.has(sr.roomCode)) {
-        const localSession = localMap[sr.roomCode];
-        summariesMap[sr.roomCode] = {
-          roomCode: sr.roomCode,
-          roomId: sr.roomId || localSession?.roomId || "",
-          roomName: sr.roomName || localSession?.roomName || "Live Room",
-          isHost: localSession?.isHost ?? sr.isHost ?? false,
-          deviceId: localSession?.deviceId || sr.deviceId,
-          participantCount: sr.participantCount ?? sr.devicesCount ?? sr.devices?.length ?? 1,
-          filesCount: sr.filesCount ?? sr.files?.length ?? 0,
-          status: sr.status || "active",
-          expiresAt: sr.expiresAt,
-          lastActivityAt: sr.lastActivityAt,
-        };
-
-        if (localSession) {
-          localMap[sr.roomCode] = {
-            ...localSession,
-            roomId: sr.roomId || localSession.roomId,
-            roomName: sr.roomName || localSession.roomName,
-            isHost: localSession.isHost ?? sr.isHost ?? false,
-          };
-        }
-      }
-    }
-
-    // 2. Fetch individual room states for any local session not covered by lookup concurrently in parallel
-    const remainingCodes = localCodes.filter(
-      (code) => !serverRooms.some((sr: any) => sr && sr.roomCode === code)
-    );
-
-    if (remainingCodes.length > 0) {
-      await Promise.allSettled(
-        remainingCodes.map(async (code) => {
-          if (leftCodes.has(code)) return;
-          const session = localMap[code];
-          try {
-            const res = await fetch(`${API_BASE}/api/rooms/${code}`, {
-              headers: {
-                "x-device-id": session.deviceId,
-                "x-device-token": session.deviceToken,
-              },
-            });
-            const body = await res.json();
-            if (res.ok && body.success && body.data) {
-              const rData = body.data;
-              summariesMap[code] = {
-                roomCode: code,
-                roomId: rData.roomId || session.roomId || "",
-                roomName: rData.roomName || session.roomName || "Live Room",
-                isHost: session.isHost,
-                deviceId: session.deviceId,
-                participantCount: rData.devices?.length || 1,
-                filesCount: rData.files?.length || 0,
-                status: rData.status || "active",
-                expiresAt: rData.expiresAt,
-                lastActivityAt: rData.lastActivityAt,
-              };
-            } else if (res.status === 404 || body?.error?.code === "ROOM_NOT_FOUND") {
+    // Concurrently validate stored rooms with the server using their own device credentials
+    await Promise.allSettled(
+      localCodes.map(async (code) => {
+        if (leftCodes.has(code)) return;
+        const session = localMap[code];
+        try {
+          const res = await fetch(`${API_BASE}/api/rooms/${code}`, {
+            headers: {
+              "x-device-id": session.deviceId,
+              "x-device-token": session.deviceToken,
+            },
+          });
+          const body = await res.json();
+          if (res.ok && body.success && body.data) {
+            const rData = body.data;
+            const currentDev = rData.devices?.find((d: any) => d.deviceId === session.deviceId);
+            if (!currentDev) {
+              // Device was removed from the room by host
               delete localMap[code];
               removeCachedRoomState(code);
               delete summariesMap[code];
+              return;
             }
-          } catch {
-            // Keep existing optimistic stub on network blip
+
+            summariesMap[code] = {
+              roomCode: code,
+              roomId: rData.roomId || session.roomId || "",
+              roomName: rData.roomName || session.roomName || "Live Room",
+              isHost: currentDev.isHost ?? session.isHost,
+              deviceId: session.deviceId,
+              participantCount: rData.devices?.length || 1,
+              filesCount: rData.files?.length || 0,
+              status: rData.status || "active",
+              expiresAt: rData.expiresAt,
+              lastActivityAt: rData.lastActivityAt,
+            };
+
+            localMap[code] = {
+              ...session,
+              roomId: rData.roomId || session.roomId,
+              roomName: rData.roomName || session.roomName,
+              isHost: currentDev.isHost ?? session.isHost,
+            };
+          } else if (
+            res.status === 404 ||
+            res.status === 401 ||
+            res.status === 403 ||
+            body?.error?.code === "ROOM_NOT_FOUND"
+          ) {
+            delete localMap[code];
+            removeCachedRoomState(code);
+            delete summariesMap[code];
           }
-        })
-      );
-    }
+        } catch {
+          // Keep existing optimistic stub on network blip
+        }
+      })
+    );
 
     // Save pruned / updated map to localStorage
     try {
@@ -505,6 +478,8 @@ export function useConnectRoom(initialCode?: string) {
     socket.on("device_removed", ({ message }: { message?: string }) => {
       cleanupSocket();
       const nextCode = removeStoredSession(code);
+      removeCachedRoomState(code);
+      addLeftRoomCode(code);
       if (nextCode) {
         switchRoom(nextCode);
       } else {
@@ -523,10 +498,15 @@ export function useConnectRoom(initialCode?: string) {
     socket.on("room_closed", () => {
       cleanupSocket();
       const nextCode = removeStoredSession(code);
+      removeCachedRoomState(code);
+      addLeftRoomCode(code);
       if (nextCode) {
         switchRoom(nextCode);
       } else {
-        setRoom((prev) => (prev ? { ...prev, status: "closed" } : prev));
+        setRoom(null);
+        setDeviceId(null);
+        setDeviceToken(null);
+        setIsHost(false);
         setCurrentRoomCode(null);
       }
       refreshActiveRoomsList();
@@ -1263,10 +1243,17 @@ export function useConnectRoom(initialCode?: string) {
                 }
               }
 
-              if (res.status === 404 || body?.error?.code === "ROOM_NOT_FOUND") {
-                // Room expired or deleted on server
+              if (
+                res.status === 404 ||
+                res.status === 401 ||
+                res.status === 403 ||
+                body?.error?.code === "ROOM_NOT_FOUND" ||
+                (res.ok && !body.data?.devices?.some((d: any) => d.deviceId === targetSession!.deviceId))
+              ) {
+                // Room expired, closed, or device was removed from room by host
                 removeStoredSession(targetSession.roomCode);
                 removeCachedRoomState(targetSession.roomCode);
+                addLeftRoomCode(targetSession.roomCode);
                 setRoom(null);
                 setCurrentRoomCode(null);
                 cleanupSocket();
@@ -1280,76 +1267,8 @@ export function useConnectRoom(initialCode?: string) {
         }
 
         // 4. If no target session to restore:
-        // Reveal UI immediately so user sees Create / Join Room screen without any delay!
+        // Reveal UI immediately so user sees Create / Join Room screen. Never auto-join unknown rooms.
         setIsInitializing(false);
-
-        // 5. In background, check if an active room exists on this machine across browsers
-        if (!initialCode) {
-          try {
-            const lookupRes = await fetch(`${API_BASE}/api/rooms/active/lookup`);
-            const lookupBody = await lookupRes.json();
-            if (
-              !isCancelled &&
-              lookupRes.ok &&
-              lookupBody.success &&
-              lookupBody.data?.activeRoom &&
-              !leftCodes.has(lookupBody.data.activeRoom.roomCode)
-            ) {
-              const activeRoomData = lookupBody.data.activeRoom;
-              const existingNames = (activeRoomData.devices || []).map(
-                (d: any) => d.deviceName
-              );
-              const { deviceName, deviceType } = getSmartDeviceName(existingNames);
-
-              const joinRes = await fetch(`${API_BASE}/api/rooms/join`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  code: activeRoomData.roomCode,
-                  deviceName,
-                  deviceType,
-                }),
-              });
-
-              const joinBody = await joinRes.json();
-              if (!isCancelled && joinRes.ok && joinBody.success && joinBody.data) {
-                const joined = joinBody.data;
-                const joinedRoom: RoomState = {
-                  roomCode: joined.roomCode,
-                  roomId: joined.roomId,
-                  roomName: joined.roomName || "Live Room",
-                  status: joined.status,
-                  expiresAt: joined.expiresAt,
-                  lastActivityAt: new Date().toISOString(),
-                  devices: joined.devices,
-                  files: joined.files || [],
-                };
-                setRoom(joinedRoom);
-                setDeviceId(joined.deviceId);
-                setDeviceToken(joined.deviceToken);
-                setIsHost(joined.isHost || false);
-                setCurrentRoomCode(joined.roomCode);
-                saveStoredSession(
-                  {
-                    roomCode: joined.roomCode,
-                    roomId: joined.roomId,
-                    roomName: joined.roomName || "Live Room",
-                    deviceId: joined.deviceId,
-                    deviceToken: joined.deviceToken,
-                    isHost: joined.isHost || false,
-                  },
-                  true
-                );
-                saveCachedRoomState(joinedRoom);
-                connectSocket(joined.roomCode, joined.deviceId, joined.deviceToken);
-                refreshActiveRoomsList();
-                push(`Connected to Room ${joined.roomCode} (${deviceName})`, "success");
-              }
-            }
-          } catch (e) {
-            // Passive background discovery blip, ignore
-          }
-        }
       } catch (e) {
         // Fallback
       } finally {
