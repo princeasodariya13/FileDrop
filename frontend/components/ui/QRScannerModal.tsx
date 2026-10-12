@@ -20,9 +20,20 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
   const animFrameRef = useRef<number | null>(null);
   const isScanningRef = useRef<boolean>(false);
   const scannedRef = useRef<boolean>(false);
+  const barcodeDetectorRef = useRef<any>(null);
+  const isDetectingRef = useRef<boolean>(false);
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== "undefined" && "BarcodeDetector" in window) {
+      try {
+        barcodeDetectorRef.current = new (window as any).BarcodeDetector({
+          formats: ["qr_code"],
+        });
+      } catch (e) {
+        barcodeDetectorRef.current = null;
+      }
+    }
   }, []);
 
   const [hasCamera, setHasCamera] = useState<boolean | null>(null);
@@ -136,32 +147,63 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         } else {
           router.push(`/file/${encodeURIComponent(trimmed)}`);
         }
-      }, 700);
+      }, 220);
 
     },
     [playBeep, push, stopCameraStream, onClose, router]
   );
 
-  // Scan frame loop
-  const scanLoop = useCallback(() => {
+  // Scan frame loop - Ultra-fast with Native BarcodeDetector + downscaled jsQR fallback
+  const scanLoop = useCallback(async () => {
     if (!isScanningRef.current || scannedRef.current) return;
 
     const video = videoRef.current;
-    const canvas = canvasRef.current;
+    if (!video || video.readyState < video.HAVE_CURRENT_DATA) {
+      if (isScanningRef.current && !scannedRef.current) {
+        animFrameRef.current = requestAnimationFrame(scanLoop);
+      }
+      return;
+    }
 
-    if (video && canvas && video.readyState >= video.HAVE_CURRENT_DATA) {
+    // 1. Hardware-accelerated Native BarcodeDetector (2-5ms execution directly on video element)
+    if (barcodeDetectorRef.current && !isDetectingRef.current) {
+      isDetectingRef.current = true;
+      try {
+        const barcodes = await barcodeDetectorRef.current.detect(video);
+        if (barcodes && barcodes.length > 0 && barcodes[0]?.rawValue) {
+          handleDecodedData(barcodes[0].rawValue);
+          isDetectingRef.current = false;
+          return;
+        }
+      } catch (e) {
+        // Fallback to jsQR
+      } finally {
+        isDetectingRef.current = false;
+      }
+    }
+
+    if (scannedRef.current) return;
+
+    // 2. High-performance downscaled jsQR fallback (10-15ms execution)
+    const canvas = canvasRef.current;
+    if (canvas) {
       const width = video.videoWidth;
       const height = video.videoHeight;
 
       if (width > 0 && height > 0) {
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        // Downscale to max 640px for 4x-8x faster pixel processing
+        const scale = Math.min(1, 640 / Math.max(width, height));
+        const scanWidth = Math.round(width * scale);
+        const scanHeight = Math.round(height * scale);
 
+        if (canvas.width !== scanWidth) canvas.width = scanWidth;
+        if (canvas.height !== scanHeight) canvas.height = scanHeight;
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
         if (ctx) {
-          ctx.drawImage(video, 0, 0, width, height);
-          const imageData = ctx.getImageData(0, 0, width, height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          ctx.drawImage(video, 0, 0, scanWidth, scanHeight);
+          const imageData = ctx.getImageData(0, 0, scanWidth, scanHeight);
+          const code = jsQR(imageData.data, scanWidth, scanHeight, {
             inversionAttempts: "dontInvert",
           });
 
@@ -198,9 +240,9 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     try {
       const constraints: MediaStreamConstraints = {
         video: {
-          facingMode: facingMode,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
         },
         audio: false,
       };
@@ -209,25 +251,37 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       streamRef.current = stream;
       setHasCamera(true);
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          if (videoRef.current) {
-            videoRef.current.play().catch(() => {});
-            isScanningRef.current = true;
-            if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-            animFrameRef.current = requestAnimationFrame(scanLoop);
-          }
-        };
-      }
-
-      // Check for torch/flashlight capability
       const track = stream.getVideoTracks()[0];
       if (track) {
-        const capabilities: any = track.getCapabilities ? track.getCapabilities() : {};
-        if (capabilities.torch) {
-          setHasTorch(true);
-        }
+        // Enable continuous autofocus if supported on device
+        try {
+          const caps: any = track.getCapabilities ? track.getCapabilities() : {};
+          if (caps.focusMode && caps.focusMode.includes("continuous")) {
+            await (track as any).applyConstraints({
+              advanced: [{ focusMode: "continuous" }],
+            });
+          }
+          if (caps.torch) {
+            setHasTorch(true);
+          }
+        } catch (e) {}
+      }
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("autoplay", "true");
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.setAttribute("muted", "true");
+
+        const startScanning = () => {
+          isScanningRef.current = true;
+          if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+          animFrameRef.current = requestAnimationFrame(scanLoop);
+        };
+
+        videoRef.current.play().then(startScanning).catch(() => {
+          videoRef.current?.addEventListener("playing", startScanning, { once: true });
+        });
       }
     } catch (err: any) {
       console.error("Camera access error:", err);
@@ -321,7 +375,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/60 dark:bg-black/75 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           stopCameraStream();
@@ -332,11 +386,11 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       aria-modal="true"
       aria-label="QR Code Scanner"
     >
-      <div className="relative w-full max-w-sm sm:max-w-md overflow-hidden rounded-3xl bg-slate-950 border border-white/10 shadow-[0_10px_50px_rgba(0,0,0,0.8)] animate-fade-in-scale flex flex-col items-center z-[100000]">
+      <div className="relative w-full max-w-sm sm:max-w-md overflow-hidden rounded-3xl modal-card shadow-2xl animate-fade-in-scale flex flex-col items-center z-[100000]">
         {/* Top Header Bar */}
-        <div className="w-full flex items-center justify-between px-5 py-3.5 bg-slate-950 border-b border-white/10 z-20">
+        <div className="w-full flex items-center justify-between px-5 py-3.5 bg-surface/80 dark:bg-surface/50 border-b border-surface-hover backdrop-blur-sm z-20">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500/20 text-brand-400 border border-brand-500/30">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500/15 text-brand-500 dark:text-brand-400 border border-brand-500/25">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 7V5a2 2 0 0 1 2-2h2" />
                 <path d="M17 3h2a2 2 0 0 1 2 2v2" />
@@ -345,8 +399,8 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
               </svg>
             </span>
             <div>
-              <h3 className="text-sm font-bold text-white font-heading leading-tight">Scan QR Code</h3>
-              <p className="text-[11px] text-slate-400 font-mono">GooglePay style scanner</p>
+              <h3 className="text-sm font-bold modal-title font-heading leading-tight">Scan QR Code</h3>
+              <p className="text-[11px] modal-sub font-mono">Align code inside frame</p>
             </div>
           </div>
 
@@ -356,10 +410,10 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
               <button
                 type="button"
                 onClick={toggleTorch}
-                className={`p-2 rounded-full border transition-all ${
+                className={`p-2 rounded-xl border transition-all ${
                   isTorchOn
                     ? "bg-amber-400 text-slate-950 border-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.6)]"
-                    : "bg-white/10 border-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
+                    : "bg-surface hover:bg-surface-hover border-surface-hover text-ink-300 hover:text-ink-50"
                 }`}
                 title={isTorchOn ? "Turn off Flash" : "Turn on Flash"}
                 aria-label="Toggle Flashlight"
@@ -375,7 +429,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
               <button
                 type="button"
                 onClick={flipCamera}
-                className="p-2 rounded-full bg-white/10 border border-white/10 text-slate-300 hover:bg-white/20 hover:text-white transition-colors"
+                className="p-2 rounded-xl bg-surface hover:bg-surface-hover border border-surface-hover text-ink-300 hover:text-ink-50 transition-colors"
                 title="Switch Camera (Front/Back)"
                 aria-label="Flip Camera"
               >
@@ -392,7 +446,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
                 stopCameraStream();
                 onClose();
               }}
-              className="p-2 rounded-full bg-white/10 border border-white/10 text-slate-300 hover:bg-white/20 hover:text-white transition-colors ml-1"
+              className="p-2 rounded-xl bg-surface hover:bg-surface-hover border border-surface-hover text-ink-300 hover:text-ink-50 transition-colors ml-1"
               aria-label="Close scanner"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -404,7 +458,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         </div>
 
         {/* Camera Live Viewfinder Area */}
-        <div className="relative w-full h-[320px] sm:h-[360px] bg-slate-950 flex items-center justify-center overflow-hidden">
+        <div className="relative w-full h-[320px] sm:h-[360px] bg-black flex items-center justify-center overflow-hidden">
           {/* Live Video Feed */}
           <video
             ref={videoRef}
@@ -417,7 +471,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
           {/* Hidden Canvas for QR parsing */}
           <canvas ref={canvasRef} className="hidden" />
 
-          {/* Google Pay / Paytm Style Focus Frame & Cutout */}
+          {/* Scanner Focus Frame & Cutout */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
             {/* Viewfinder Target Box */}
             <div
@@ -429,37 +483,37 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
               {/* Corner 1: Top-Left */}
               <div
                 className={`absolute -top-1 -left-1 w-7 h-7 border-t-4 border-l-4 rounded-tl-2xl transition-colors duration-300 ${
-                  scannedSuccess ? "border-emerald-400" : "border-brand-400"
+                  scannedSuccess ? "border-emerald-400" : "border-brand-500 dark:border-brand-400"
                 }`}
               />
               {/* Corner 2: Top-Right */}
               <div
                 className={`absolute -top-1 -right-1 w-7 h-7 border-t-4 border-r-4 rounded-tr-2xl transition-colors duration-300 ${
-                  scannedSuccess ? "border-emerald-400" : "border-brand-400"
+                  scannedSuccess ? "border-emerald-400" : "border-brand-500 dark:border-brand-400"
                 }`}
               />
               {/* Corner 3: Bottom-Left */}
               <div
                 className={`absolute -bottom-1 -left-1 w-7 h-7 border-b-4 border-l-4 rounded-bl-2xl transition-colors duration-300 ${
-                  scannedSuccess ? "border-emerald-400" : "border-brand-400"
+                  scannedSuccess ? "border-emerald-400" : "border-brand-500 dark:border-brand-400"
                 }`}
               />
               {/* Corner 4: Bottom-Right */}
               <div
                 className={`absolute -bottom-1 -right-1 w-7 h-7 border-b-4 border-r-4 rounded-br-2xl transition-colors duration-300 ${
-                  scannedSuccess ? "border-emerald-400" : "border-brand-400"
+                  scannedSuccess ? "border-emerald-400" : "border-brand-500 dark:border-brand-400"
                 }`}
               />
 
               {/* Animated Laser Scanning Beam */}
               {!scannedSuccess && hasCamera && (
-                <div className="absolute left-2 right-2 h-1 bg-gradient-to-r from-transparent via-brand-400 to-transparent shadow-[0_0_15px_#818cf8] rounded-full animate-scan-laser pointer-events-none" />
+                <div className="absolute left-2 right-2 h-1 bg-gradient-to-r from-transparent via-brand-500 dark:via-brand-400 to-transparent shadow-[0_0_15px_#818cf8] rounded-full animate-scan-laser pointer-events-none" />
               )}
 
               {/* Success Verified Overlay */}
               {scannedSuccess && (
                 <div className="absolute inset-0 rounded-3xl bg-emerald-500/30 backdrop-blur-xs flex flex-col items-center justify-center gap-2 animate-fade-in">
-                  <div className="h-12 w-12 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/50 animate-bounce">
+                  <div className="h-12 w-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/50 animate-bounce">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
@@ -474,8 +528,8 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
           {/* Camera Error / Permission Fallback */}
           {cameraError && (
-            <div className="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center space-y-3 z-10">
-              <div className="h-12 w-12 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 flex items-center justify-center">
+            <div className="absolute inset-0 bg-panel/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center space-y-3 z-10">
+              <div className="h-12 w-12 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 dark:text-red-400 flex items-center justify-center">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
@@ -483,13 +537,13 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
                 </svg>
               </div>
               <div className="space-y-1">
-                <h4 className="text-sm font-bold text-white">Camera Access</h4>
-                <p className="text-xs text-slate-400 max-w-xs">{cameraError}</p>
+                <h4 className="text-sm font-bold modal-title">Camera Access</h4>
+                <p className="text-xs modal-sub max-w-xs">{cameraError}</p>
               </div>
               <button
                 type="button"
                 onClick={startCameraStream}
-                className="px-4 py-2 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-xl transition-all shadow-md"
+                className="px-4 py-2 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-xl transition-all shadow-md cursor-pointer"
               >
                 Retry Camera
               </button>
@@ -498,8 +552,8 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         </div>
 
         {/* Bottom Bar: Instructions & Gallery Image Upload */}
-        <div className="w-full px-5 py-3.5 bg-slate-950 border-t border-white/10 flex flex-col items-center gap-2.5">
-          <p className="text-xs text-slate-400 text-center font-medium">
+        <div className="w-full px-5 py-3.5 bg-surface/80 dark:bg-surface/50 border-t border-surface-hover flex flex-col items-center gap-2.5">
+          <p className="text-xs modal-sub text-center font-medium">
             Point camera at QR code or upload from gallery
           </p>
 
@@ -514,9 +568,9 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-slate-200 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface hover:bg-surface-hover border border-surface-hover text-xs font-medium text-ink-200 hover:text-ink-50 transition-colors cursor-pointer"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-500 dark:text-brand-400">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
