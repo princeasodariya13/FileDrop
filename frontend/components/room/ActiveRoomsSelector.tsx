@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { RoomSummary } from "@/types/room";
 import { Button } from "@/components/ui/Button";
@@ -68,6 +68,34 @@ export function ActiveRoomsSelector({
   };
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking or tapping anywhere on the screen outside the menu
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMobileMenuOpen]);
 
   return (
     <div className={`space-y-2 relative ${isMobileMenuOpen ? "z-50" : "z-20"}`}>
@@ -137,7 +165,7 @@ export function ActiveRoomsSelector({
               <span>New</span>
             </button>
 
-            <div className="relative z-[99999]">
+            <div ref={menuRef} className="relative z-[99999]">
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen((prev) => !prev)}
@@ -153,10 +181,15 @@ export function ActiveRoomsSelector({
 
               {isMobileMenuOpen && (
                 <>
-                  <div
-                    className="fixed inset-0 z-[99990]"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  />
+                  {typeof document !== "undefined" &&
+                    createPortal(
+                      <div
+                        className="fixed inset-0 z-[99980] bg-transparent pointer-events-auto"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        onTouchStart={() => setIsMobileMenuOpen(false)}
+                      />,
+                      document.body
+                    )}
                   <div className="absolute right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] rounded-2xl dropdown-card p-2 z-[99999] shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
                     <button
                       type="button"
