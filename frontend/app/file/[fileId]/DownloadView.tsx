@@ -165,10 +165,10 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
             role="alert"
             className={`relative z-10 p-3.5 mb-5 rounded-xl border flex items-center gap-2.5 text-xs sm:text-sm font-medium animate-fade-in-scale ${
               inlineToast.tone === "success"
-                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                ? "bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-800 dark:text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
                 : inlineToast.tone === "error"
-                ? "bg-red-500/15 border-red-500/30 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.2)]"
-                : "bg-brand-500/15 border-brand-500/30 text-brand-300"
+                ? "bg-red-500/10 dark:bg-red-500/15 border-red-500/30 text-red-800 dark:text-red-200 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
+                : "bg-brand-500/10 dark:bg-brand-500/15 border-brand-500/30 text-brand-800 dark:text-brand-200"
             }`}
           >
             {inlineToast.tone === "success" ? (

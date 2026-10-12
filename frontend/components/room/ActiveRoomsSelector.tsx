@@ -323,11 +323,16 @@ export function ActiveRoomsSelector({
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
-                <Button type="submit" size="sm" disabled={isSubmitting} className="text-xs">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSubmitting}
+                  className="text-xs font-semibold text-white px-5"
+                >
                   {isSubmitting ? "Creating..." : "Create Room"}
                 </Button>
               </div>
@@ -407,11 +412,16 @@ export function ActiveRoomsSelector({
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => setIsJoinModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
-                <Button type="submit" size="sm" disabled={isSubmitting || joinCode.length !== 6} className="text-xs">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSubmitting || joinCode.length !== 6}
+                  className="text-xs font-semibold text-white px-5"
+                >
                   {isSubmitting ? "Joining..." : "Join Room"}
                 </Button>
               </div>
