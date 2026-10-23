@@ -38,6 +38,14 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
   useEffect(() => {
     setMounted(true);
+    // Set default facing mode based on mobile vs desktop
+    if (typeof navigator !== "undefined") {
+      const isMobile =
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
+      setFacingMode(isMobile ? "environment" : "user");
+    }
+
     if (typeof window !== "undefined" && "BarcodeDetector" in window) {
       try {
         barcodeDetectorRef.current = new (window as any).BarcodeDetector({
@@ -285,36 +293,53 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     [scanLoop]
   );
 
-  // Progressive camera stream requester: mobile back camera first, universal video: true fallback for Windows & desktop
+  // Progressive camera stream requester: device-tailored for instant default access on Windows and mobile
   const acquireCameraStream = useCallback(async (preferredFacing: "environment" | "user"): Promise<MediaStream> => {
-    // Strategy 1: Ideal facingMode (preferred on mobile devices with back camera)
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: preferredFacing },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-    } catch (e1) {
-      console.warn("Preferred facingMode failed, falling back to universal video constraint:", e1);
+    const isMobile =
+      typeof navigator !== "undefined" &&
+      (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        (navigator.maxTouchPoints && navigator.maxTouchPoints > 2));
+
+    // Mobile: Directly request back camera
+    if (isMobile) {
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: preferredFacing },
+          },
+          audio: false,
+        });
+      } catch (e1) {
+        console.warn("Mobile preferred facingMode failed, falling back to default video:", e1);
+      }
     }
 
-    // Strategy 2: Universal fallback for Windows, laptops, and desktop webcams
-    // Calling plain video: true prompts for permission and opens default webcam without constraint mismatch
+    // Windows, laptops & desktop webcams: plain video: true
+    // This allows Windows / Mac webcams to prompt for access and open immediately by default without constraint failure
     try {
       return await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: false,
       });
     } catch (e2) {
-      console.warn("Universal video: true failed:", e2);
+      // If video: true failed, try querying video devices
+      if (navigator.mediaDevices.enumerateDevices) {
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDev = devices.find((d) => d.kind === "videoinput");
+          if (videoDev) {
+            return await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: { exact: videoDev.deviceId } },
+              audio: false,
+            });
+          }
+        } catch (e3) {}
+      }
       throw e2;
     }
   }, []);
 
-  // Start Camera
+  // Start Camera - runs automatically by default when scanner opens
   const startCameraStream = useCallback(async () => {
     stopCameraStream();
     setCameraError(null);
@@ -355,7 +380,6 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
       const track = stream.getVideoTracks()[0];
       if (track) {
-        // Enable continuous autofocus if supported on device
         try {
           const caps: any = track.getCapabilities ? track.getCapabilities() : {};
           if (caps.focusMode && caps.focusMode.includes("continuous")) {
@@ -376,7 +400,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       setIsLoadingCamera(false);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
         setPermissionState("denied");
-        setCameraError("Please allow camera access to scan QR codes.");
+        setCameraError("Camera access was not granted. Please allow camera access in the browser prompt or address bar, then click Try Again.");
       } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
         setCameraError("No camera device was detected on your system.");
       } else {
@@ -481,7 +505,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     reader.readAsDataURL(file);
   };
 
-  // Handle camera mount/unmount and facing mode changes
+  // Handle camera mount/unmount and facing mode changes: starts camera automatically by default
   useEffect(() => {
     if (isOpen) {
       startCameraStream();
@@ -595,7 +619,12 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         <div className="relative w-full h-[340px] sm:h-[380px] bg-black flex items-center justify-center overflow-hidden">
           {/* Live Video Feed */}
           <video
-            ref={videoRef}
+            ref={(el) => {
+              (videoRef as any).current = el;
+              if (el && streamRef.current && el.srcObject !== streamRef.current) {
+                attachStreamToVideo(streamRef.current);
+              }
+            }}
             className="w-full h-full object-cover"
             playsInline
             muted
