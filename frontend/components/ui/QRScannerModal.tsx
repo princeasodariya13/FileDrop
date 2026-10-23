@@ -13,9 +13,11 @@ interface QRScannerModalProps {
 
 export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mobileCaptureRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const isScanningRef = useRef<boolean>(false);
@@ -38,12 +40,12 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
   useEffect(() => {
     setMounted(true);
-    // Set default facing mode based on mobile vs desktop
     if (typeof navigator !== "undefined") {
-      const isMobile =
+      const mobile =
         /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
         (navigator.maxTouchPoints && navigator.maxTouchPoints > 2);
-      setFacingMode(isMobile ? "environment" : "user");
+      setIsMobile(Boolean(mobile));
+      setFacingMode(mobile ? "environment" : "user");
     }
 
     if (typeof window !== "undefined" && "BarcodeDetector" in window) {
@@ -256,11 +258,18 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     }
   }, [handleDecodedData]);
 
-  // Connect stream to video element safely and trigger playback
+  // Connect stream to video element safely and trigger immediate playback (WebKit/iOS & Android compatible)
   const attachStreamToVideo = useCallback(
     (stream: MediaStream) => {
       const video = videoRef.current;
       if (!video) return;
+
+      const startPlayback = () => {
+        setIsLoadingCamera(false);
+        isScanningRef.current = true;
+        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = requestAnimationFrame(scanLoop);
+      };
 
       video.srcObject = stream;
       video.muted = true;
@@ -271,23 +280,24 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       video.setAttribute("webkit-playsinline", "true");
       video.setAttribute("muted", "true");
 
-      const onReady = async () => {
-        try {
-          await video.play();
-        } catch (err) {
-          console.warn("Video play error:", err);
-        }
-        setIsLoadingCamera(false);
-        isScanningRef.current = true;
-        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-        animFrameRef.current = requestAnimationFrame(scanLoop);
+      video.onloadedmetadata = () => {
+        startPlayback();
       };
 
-      if (video.readyState >= 2 && video.videoWidth > 0) {
-        onReady();
-      } else {
-        video.onloadedmetadata = () => onReady();
-        video.oncanplay = () => onReady();
+      // Call video.play() immediately — REQUIRED by iOS Safari to trigger metadata and video rendering!
+      try {
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              startPlayback();
+            })
+            .catch((err) => {
+              console.warn("video.play() caught:", err);
+            });
+        }
+      } catch (e) {
+        console.warn("Immediate play error:", e);
       }
     },
     [scanLoop]
@@ -295,34 +305,44 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
   // Progressive camera stream requester: device-tailored for instant default access on Windows and mobile
   const acquireCameraStream = useCallback(async (preferredFacing: "environment" | "user"): Promise<MediaStream> => {
-    const isMobile =
+    const isMobileDevice =
       typeof navigator !== "undefined" &&
       (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
         (navigator.maxTouchPoints && navigator.maxTouchPoints > 2));
 
-    // Mobile: Directly request back camera
-    if (isMobile) {
+    // 1. Mobile devices: Try rear environment camera first
+    if (isMobileDevice) {
       try {
         return await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: { ideal: preferredFacing },
+            facingMode: { ideal: "environment" },
           },
           audio: false,
         });
       } catch (e1) {
-        console.warn("Mobile preferred facingMode failed, falling back to default video:", e1);
+        console.warn("Mobile facingMode ideal failed, trying string:", e1);
+      }
+
+      try {
+        return await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment",
+          },
+          audio: false,
+        });
+      } catch (e2) {
+        console.warn("Mobile facingMode exact failed, trying generic video:", e2);
       }
     }
 
-    // Windows, laptops & desktop webcams: plain video: true
-    // This allows Windows / Mac webcams to prompt for access and open immediately by default without constraint failure
+    // 2. Windows, laptops & mobile fallback: universal video: true
     try {
       return await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: false,
       });
-    } catch (e2) {
-      // If video: true failed, try querying video devices
+    } catch (e3) {
+      // 3. Last resort device enumeration
       if (navigator.mediaDevices.enumerateDevices) {
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();
@@ -333,9 +353,9 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
               audio: false,
             });
           }
-        } catch (e3) {}
+        } catch (e4) {}
       }
-      throw e2;
+      throw e3;
     }
   }, []);
 
@@ -347,7 +367,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     setScannedSuccess(false);
     scannedRef.current = false;
 
-    // Check secure context (HTTPS / localhost required by browsers)
+    // Check secure context (HTTPS / localhost required by WebRTC)
     if (
       typeof window !== "undefined" &&
       !window.isSecureContext &&
@@ -356,7 +376,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     ) {
       setHasCamera(false);
       setIsLoadingCamera(false);
-      setCameraError("Camera access requires HTTPS or localhost. If opening from mobile, connect via HTTPS or upload a QR image below.");
+      setCameraError("Camera requires HTTPS. On mobile, use 'Open Phone Camera' below to scan directly.");
       return;
     }
 
@@ -367,7 +387,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     ) {
       setHasCamera(false);
       setIsLoadingCamera(false);
-      setCameraError("Camera is not supported on this browser or device.");
+      setCameraError("Live camera is not supported on this browser. Use 'Open Phone Camera' below.");
       return;
     }
 
@@ -400,11 +420,11 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       setIsLoadingCamera(false);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
         setPermissionState("denied");
-        setCameraError("Camera access was not granted. Please allow camera access in the browser prompt or address bar, then click Try Again.");
+        setCameraError("Camera permission was not granted. Please allow camera access in your browser or use Phone Camera.");
       } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
         setCameraError("No camera device was detected on your system.");
       } else {
-        setCameraError("Unable to open camera. Please click Try Again or upload a QR image.");
+        setCameraError("Unable to open camera. Click Try Again or Open Phone Camera.");
       }
     }
   }, [facingMode, acquireCameraStream, attachStreamToVideo, stopCameraStream]);
@@ -414,14 +434,14 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     setIsLoadingCamera(true);
     setCameraError(null);
 
+    // If mediaDevices is unavailable (e.g. testing over local HTTP LAN on phone), automatically launch native phone camera!
     if (
       typeof navigator === "undefined" ||
       !navigator.mediaDevices ||
       !navigator.mediaDevices.getUserMedia
     ) {
-      setHasCamera(false);
       setIsLoadingCamera(false);
-      setCameraError("Camera is not supported on this browser or device.");
+      mobileCaptureRef.current?.click();
       return;
     }
 
@@ -438,11 +458,11 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       setHasCamera(false);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
         setPermissionState("denied");
-        setCameraError("Camera permission was not granted. Please allow camera access in the browser prompt or address bar, then click Try Again.");
+        setCameraError("Camera access was blocked. Please tap 'Open Phone Camera' below or allow camera in browser settings.");
       } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
         setCameraError("No camera device was detected on your system.");
       } else {
-        setCameraError("Unable to open camera. Please click Try Again or upload a QR image.");
+        setCameraError("Unable to open camera. Please use 'Open Phone Camera' below.");
       }
     }
   };
@@ -476,7 +496,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
   };
 
-  // Handle uploaded QR image file
+  // Handle uploaded QR image file or native camera capture
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -497,12 +517,13 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         if (code && code.data) {
           handleDecodedData(code.data);
         } else {
-          push("No valid QR code found in the uploaded image.", "error");
+          push("No valid QR code found in the image. Please try again.", "error");
         }
       };
       img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   // Handle camera mount/unmount and facing mode changes: starts camera automatically by default
@@ -545,6 +566,25 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       aria-label="QR Code Scanner"
     >
       <div className="relative w-full max-w-sm sm:max-w-md overflow-hidden rounded-3xl modal-card shadow-2xl animate-fade-in-scale flex flex-col items-center z-[100000]">
+        {/* Hidden native mobile camera capture input: works 100% on all mobile devices & LAN HTTP */}
+        <input
+          ref={mobileCaptureRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleImageUpload}
+        />
+
+        {/* Hidden gallery file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageUpload}
+        />
+
         {/* Top Header Bar */}
         <div className="w-full flex items-center justify-between px-5 py-3.5 bg-surface/80 dark:bg-surface/50 border-b border-surface-hover backdrop-blur-sm z-20">
           <div className="flex items-center gap-2.5">
@@ -697,7 +737,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
             </div>
           </div>
 
-          {/* Camera Error / Permission Fallback View - Single Try Again Button */}
+          {/* Camera Error / Permission Fallback View */}
           {cameraError && (
             <div className="absolute inset-0 bg-panel/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center space-y-4 z-20 animate-fade-in">
               <div className="h-12 w-12 rounded-2xl bg-brand-500/15 border border-brand-500/30 text-brand-500 flex items-center justify-center shrink-0">
@@ -714,17 +754,33 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleRequestPermission}
-                className="px-6 py-2.5 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-full transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-2"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                  <circle cx="12" cy="13" r="4" />
-                </svg>
-                <span>Try Again</span>
-              </button>
+              <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full max-w-xs pt-1">
+                <button
+                  type="button"
+                  onClick={handleRequestPermission}
+                  className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-full transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                  <span>Try Again</span>
+                </button>
+
+                {isMobile && (
+                  <button
+                    type="button"
+                    onClick={() => mobileCaptureRef.current?.click()}
+                    className="w-full py-2.5 px-4 text-xs font-semibold text-ink-100 bg-surface hover:bg-surface-hover border border-surface-hover rounded-full transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-500">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                    <span>Open Phone Camera</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -735,14 +791,21 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
             Point camera at QR code or upload from gallery
           </p>
 
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImageUpload}
-            />
+          <div className="flex items-center gap-2">
+            {isMobile && (
+              <button
+                type="button"
+                onClick={() => mobileCaptureRef.current?.click()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 text-xs font-semibold text-brand-500 transition-colors cursor-pointer"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                <span>Phone Camera</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
