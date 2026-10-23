@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { QRCodeModal } from "@/components/ui/QRCodeModal";
 import { formatBytes, formatTimestamp } from "@/utils/format";
 import { useToast } from "@/components/ui/Toast";
+import { scrollToElement } from "@/utils/scroll";
 
 interface PendingFileItem {
   id: string;
@@ -115,7 +116,24 @@ export function RoomView({
   const [siteUrl, setSiteUrl] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const sharedFilesRef = useRef<HTMLDivElement>(null);
   const { push } = useToast();
+
+  // Auto-scroll to pending files when user selects files to share
+  useEffect(() => {
+    if (pendingFiles.length > 0) {
+      scrollToElement(dropdownRef.current);
+    }
+  }, [pendingFiles.length]);
+
+  // Auto-scroll to shared files feed when a new file is uploaded/added to the room
+  const prevFilesCount = useRef(room.files.length);
+  useEffect(() => {
+    if (room.files.length > prevFilesCount.current) {
+      scrollToElement(sharedFilesRef.current);
+    }
+    prevFilesCount.current = room.files.length;
+  }, [room.files.length]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -244,6 +262,7 @@ export function RoomView({
   const uploadPendingFiles = async () => {
     if (pendingFiles.length === 0 || isUploading) return;
 
+    let anyUploaded = false;
     const itemsToUpload = [...pendingFiles];
     for (let i = 0; i < itemsToUpload.length; i++) {
       const item = itemsToUpload[i];
@@ -254,10 +273,14 @@ export function RoomView({
         );
         // Remove successfully uploaded file from pending list
         setPendingFiles((prev) => prev.filter((p) => p.id !== item.id));
+        anyUploaded = true;
       } catch (err: any) {
         // Stop sequential queue on error so remaining files are preserved for retry
         break;
       }
+    }
+    if (anyUploaded) {
+      scrollToElement(sharedFilesRef.current);
     }
   };
 
@@ -920,7 +943,7 @@ export function RoomView({
       )}
 
       {/* Shared Files Feed — Organized by Uploader */}
-      <div className="rounded-card p-6 border border-surface bg-surface/50 backdrop-blur-xl shadow-xl space-y-5">
+      <div ref={sharedFilesRef} className="rounded-card p-6 border border-surface bg-surface/50 backdrop-blur-xl shadow-xl space-y-5">
         <div className="flex items-center justify-between border-b border-surface pb-3">
           <h3 className="text-sm font-bold font-heading text-ink-50 flex items-center gap-2">
             <span>Shared Room Files</span>

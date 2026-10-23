@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useConnectRoom } from "@/hooks/useConnectRoom";
 import { RoomView } from "./RoomView";
 import { ConnectDevicesSkeleton } from "./ConnectDevicesSkeleton";
 import { Button } from "@/components/ui/Button";
 import { QRScannerModal } from "@/components/ui/QRScannerModal";
 import { getDeviceDefaults } from "@/utils/device";
+import { scrollToElement } from "@/utils/scroll";
 
 export function ConnectDevicesSection() {
   const {
@@ -43,6 +44,15 @@ export function ConnectDevicesSection() {
   const [deviceName, setDeviceName] = useState<string>(() => getDeviceDefaults().deviceName);
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
 
+  const roomViewRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to room view when room is created or joined or switched
+  useEffect(() => {
+    if (room) {
+      scrollToElement(roomViewRef.current);
+    }
+  }, [room?.roomCode]);
+
   const handleCreateRoom = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isCreating) return;
@@ -61,28 +71,30 @@ export function ConnectDevicesSection() {
 
   if (room) {
     return (
-      <RoomView
-        room={room}
-        activeRooms={activeRooms}
-        currentRoomCode={currentRoomCode}
-        currentDeviceId={deviceId}
-        isHost={isHost}
-        isConnected={isConnected}
-        isUploading={isUploading}
-        uploadProgress={uploadProgress}
-        uploadingFileName={uploadingFileName}
-        onSwitchRoom={switchRoom}
-        onCreateRoom={createRoom}
-        onJoinRoom={joinRoom}
-        onUploadFile={uploadFileToRoom}
-        onDownloadFile={downloadFile}
-        onDeleteFile={deleteFileFromRoom}
-        onUpdateRecipients={updateFileRecipients}
-        onRemoveDevice={removeDeviceFromRoom}
-        onUpdateDeviceName={updateDeviceName}
-        onLeaveRoom={leaveRoom}
-        onDeleteRoom={deleteRoom}
-      />
+      <div ref={roomViewRef} className="animate-fade-in">
+        <RoomView
+          room={room}
+          activeRooms={activeRooms}
+          currentRoomCode={currentRoomCode}
+          currentDeviceId={deviceId}
+          isHost={isHost}
+          isConnected={isConnected}
+          isUploading={isUploading}
+          uploadProgress={uploadProgress}
+          uploadingFileName={uploadingFileName}
+          onSwitchRoom={switchRoom}
+          onCreateRoom={createRoom}
+          onJoinRoom={joinRoom}
+          onUploadFile={uploadFileToRoom}
+          onDownloadFile={downloadFile}
+          onDeleteFile={deleteFileFromRoom}
+          onUpdateRecipients={updateFileRecipients}
+          onRemoveDevice={removeDeviceFromRoom}
+          onUpdateDeviceName={updateDeviceName}
+          onLeaveRoom={leaveRoom}
+          onDeleteRoom={deleteRoom}
+        />
+      </div>
     );
   }
 

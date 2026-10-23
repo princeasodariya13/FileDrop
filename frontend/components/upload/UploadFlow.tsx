@@ -16,6 +16,7 @@ import { MyUploadsList } from "@/components/upload/MyUploadsList";
 
 import { ReceiveFileSection } from "@/components/receiver/ReceiveFileSection";
 import { ConnectDevicesSection } from "@/components/room/ConnectDevicesSection";
+import { scrollToElement } from "@/utils/scroll";
 
 const DEFAULT_OPTIONS: UploadOptions = { expirationSeconds: 3600, downloadLimit: null };
 
@@ -42,6 +43,10 @@ export function UploadFlow() {
   const [unfinishedUpload, setUnfinishedUpload] = useState<ActiveUploadMetadata | null>(null);
   const resumeInputRef = useRef<HTMLInputElement>(null);
   const addFilesInputRef = useRef<HTMLInputElement>(null);
+
+  const shareResultRef = useRef<HTMLDivElement>(null);
+  const selectedFilesRef = useRef<HTMLDivElement>(null);
+  const modeSwitcherRef = useRef<HTMLDivElement>(null);
 
   // Auto-switch to Connect Devices tab if active room session exists
   useEffect(() => {
@@ -205,9 +210,29 @@ export function UploadFlow() {
     setCurrentUploadingFileName(null);
     setOptions(DEFAULT_OPTIONS);
     reset();
+    scrollToElement(modeSwitcherRef.current);
+  }
+
+  function handleTabChange(tab: "send" | "receive" | "connect") {
+    setActiveTab(tab);
+    scrollToElement(modeSwitcherRef.current);
   }
 
   const activeResult = batchResult || (state.status === "success" ? state.result : null);
+
+  // Auto-redirect / scroll to the share result card when upload finishes
+  useEffect(() => {
+    if (activeResult) {
+      scrollToElement(shareResultRef.current);
+    }
+  }, [activeResult]);
+
+  // Auto-scroll to selected files & upload button when user selects files
+  useEffect(() => {
+    if (selectedFiles.length > 0) {
+      scrollToElement(selectedFilesRef.current);
+    }
+  }, [selectedFiles.length]);
 
   // When active upload is deleted (either from ShareResult or MyUploadsList), immediately reset the interface
   useEffect(() => {
@@ -268,10 +293,10 @@ export function UploadFlow() {
   return (
     <div className="space-y-6">
       {/* Send / Receive / Connect Mode Switcher - Always Visible */}
-      <div className="flex items-center justify-center p-1.5 bg-surface border border-surface-hover rounded-2xl max-w-md mx-auto shadow-inner gap-1">
+      <div ref={modeSwitcherRef} className="flex items-center justify-center p-1.5 bg-surface border border-surface-hover rounded-2xl max-w-md mx-auto shadow-inner gap-1">
         <button
           type="button"
-          onClick={() => setActiveTab("send")}
+          onClick={() => handleTabChange("send")}
           className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
             activeTab === "send"
               ? "bg-btn-primary text-white shadow-lg shadow-brand-500/30"
@@ -282,7 +307,7 @@ export function UploadFlow() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("receive")}
+          onClick={() => handleTabChange("receive")}
           className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
             activeTab === "receive"
               ? "bg-btn-primary text-white shadow-lg shadow-brand-500/30"
@@ -293,7 +318,7 @@ export function UploadFlow() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("connect")}
+          onClick={() => handleTabChange("connect")}
           className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
             activeTab === "connect"
               ? "bg-btn-primary text-white shadow-lg shadow-brand-500/30"
@@ -312,7 +337,7 @@ export function UploadFlow() {
         <div className="space-y-6">
           {/* Active Upload Result Banner - shown after upload completes */}
           {activeResult && (
-            <div className="animate-fade-in-scale">
+            <div ref={shareResultRef} className="animate-fade-in-scale">
               <ShareResult
                 result={activeResult}
                 onUploadAnother={handleReset}
@@ -353,7 +378,7 @@ export function UploadFlow() {
               <Dropzone onFilesSelected={handleFilesSelected} disabled={isBusy} />
 
               {selectedFiles.length > 0 && (
-                <div className="rounded-card p-6 space-y-6 animate-fade-in-scale">
+                <div ref={selectedFilesRef} className="rounded-card p-6 space-y-6 animate-fade-in-scale">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-brand-300 uppercase tracking-wider font-mono">
