@@ -8,7 +8,8 @@ import { ShareResult } from "@/components/upload/ShareResult";
 import { Button } from "@/components/ui/Button";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import { useToast } from "@/components/ui/Toast";
-import { UploadOptions, CompleteUploadResponse } from "@/types/upload";
+import { UploadOptions, CompleteUploadResponse, CreateSessionResponse } from "@/types/upload";
+import { createUploadSession, abortUpload } from "@/lib/api/uploads";
 import { formatBytes } from "@/utils/format";
 import { useMyUploads } from "@/hooks/useMyUploads";
 import { MyUploadsList } from "@/components/upload/MyUploadsList";
@@ -82,17 +83,62 @@ export function UploadFlow() {
     }
   }, [state.status]);
 
+  // Pre-warmed upload sessions keyed by file name + size + lastModified
+  const prewarmedSessionsRef = useRef<Map<string, Promise<CreateSessionResponse>>>(new Map());
+
+  const getFileKey = (file: File) => `${file.name}_${file.size}_${file.lastModified}`;
+
+  function prewarmFile(file: File) {
+    const key = getFileKey(file);
+    if (!prewarmedSessionsRef.current.has(key)) {
+      const promise = createUploadSession(file, options).catch((err) => {
+        prewarmedSessionsRef.current.delete(key);
+        throw err;
+      });
+      prewarmedSessionsRef.current.set(key, promise);
+    }
+  }
+
+  function cleanupPrewarmed(specificKey?: string) {
+    if (specificKey) {
+      const promise = prewarmedSessionsRef.current.get(specificKey);
+      if (promise) {
+        promise
+          .then((s) => {
+            if (s?.sessionId) abortUpload(s.sessionId).catch(() => {});
+          })
+          .catch(() => {});
+        prewarmedSessionsRef.current.delete(specificKey);
+      }
+      return;
+    }
+
+    prewarmedSessionsRef.current.forEach((promise) => {
+      promise
+        .then((s) => {
+          if (s?.sessionId) abortUpload(s.sessionId).catch(() => {});
+        })
+        .catch(() => {});
+    });
+    prewarmedSessionsRef.current.clear();
+  }
+
   const isBusy = ["validating", "reserving", "initializing", "uploading", "paused", "completing"].includes(state.status);
 
   function handleFilesSelected(newFiles: File[]) {
     setSelectedFiles((prev) => {
       const existingKeys = new Set(prev.map((f) => `${f.name}_${f.size}`));
       const uniqueNew = newFiles.filter((f) => !existingKeys.has(`${f.name}_${f.size}`));
+      uniqueNew.forEach((f) => prewarmFile(f));
       return [...prev, ...uniqueNew];
     });
   }
 
   function handleRemoveFile(index: number) {
+    const fileToRemove = selectedFiles[index];
+    if (fileToRemove) {
+      cleanupPrewarmed(getFileKey(fileToRemove));
+    }
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
@@ -109,7 +155,11 @@ export function UploadFlow() {
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i];
         setCurrentUploadingFileName(`File ${i + 1} of ${selectedFiles.length}: ${file.name}`);
-        const singleResult = await upload(file, options, batchCode, bundleId);
+        const key = getFileKey(file);
+        const prewarmed = prewarmedSessionsRef.current.get(key);
+        prewarmedSessionsRef.current.delete(key);
+
+        const singleResult = await upload(file, options, batchCode, bundleId, prewarmed);
         if (singleResult) {
           completedResults.push(singleResult);
         }
@@ -145,6 +195,7 @@ export function UploadFlow() {
   }
 
   function handleReset() {
+    cleanupPrewarmed();
     setSelectedFiles([]);
     setBatchResult(null);
     setCurrentUploadingFileName(null);

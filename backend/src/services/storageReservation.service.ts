@@ -22,18 +22,12 @@ async function getOrCreateLedger() {
 }
 
 /**
- * Atomically reserve `bytes` of storage.
- *
- * This uses a single findOneAndUpdate with a query-level guard:
- *   activeBytes + reservedBytes + bytes <= maxActiveStorageBytes
- * MongoDB evaluates the filter and applies the $inc in one atomic step per
- * document, so two concurrent requests can never both succeed past the cap —
- * there is no read-then-write race window.
+ * Atomically checks and reserves `bytes` on the singleton storage ledger.
+ * This provides the atomic capacity guard in a single fast DB round trip.
  */
-export async function reserveStorage(bytes: number): Promise<IStorageReservation> {
+export async function reserveLedger(bytes: number): Promise<void> {
   const cap = env.maxActiveStorageBytes;
 
-  // Step 1: Attempt atomic capacity check + increment directly (1 DB round trip when ledger exists)
   let updated = await StorageLedgerModel.findOneAndUpdate(
     {
       _id: "singleton",
@@ -43,7 +37,6 @@ export async function reserveStorage(bytes: number): Promise<IStorageReservation
     { new: true }
   );
 
-  // Step 2: If null, the singleton ledger might not exist yet OR capacity was exceeded
   if (!updated) {
     const existingLedger = await StorageLedgerModel.findById("singleton");
     if (!existingLedger) {
@@ -61,8 +54,32 @@ export async function reserveStorage(bytes: number): Promise<IStorageReservation
       throw new InsufficientStorageError();
     }
   }
+}
+
+/**
+ * Rolls back reserved bytes on the ledger if upload creation fails.
+ */
+export async function releaseLedgerBytes(bytes: number): Promise<void> {
+  await StorageLedgerModel.updateOne(
+    { _id: "singleton" },
+    { $inc: { reservedBytes: -bytes } }
+  ).catch(() => {});
+}
+
+/**
+ * Atomically reserve `bytes` of storage.
+ *
+ * This uses a single findOneAndUpdate with a query-level guard:
+ *   activeBytes + reservedBytes + bytes <= maxActiveStorageBytes
+ * MongoDB evaluates the filter and applies the $inc in one atomic step per
+ * document, so two concurrent requests can never both succeed past the cap —
+ * there is no read-then-write race window.
+ */
+export async function reserveStorage(bytes: number, customId?: Types.ObjectId): Promise<IStorageReservation> {
+  await reserveLedger(bytes);
 
   const reservation = await StorageReservationModel.create({
+    _id: customId || new Types.ObjectId(),
     bytesReserved: bytes,
     status: "reserved",
     expiresAt: new Date(Date.now() + env.reservationTtlMinutes * 60 * 1000),

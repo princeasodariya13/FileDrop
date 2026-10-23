@@ -28,11 +28,19 @@ export async function completeUpload(
   sessionId: string,
   parts: CompletedPart[],
   batchCode?: string,
-  bundleId?: string
+  bundleId?: string,
+  options?: UploadOptions
 ): Promise<CompleteUploadResponse> {
   return apiFetch<CompleteUploadResponse>("/api/uploads/complete", {
     method: "POST",
-    body: JSON.stringify({ sessionId, parts, code: batchCode, bundleId }),
+    body: JSON.stringify({
+      sessionId,
+      parts,
+      code: batchCode,
+      bundleId,
+      expirationSeconds: options?.expirationSeconds,
+      downloadLimit: options?.downloadLimit,
+    }),
   });
 }
 

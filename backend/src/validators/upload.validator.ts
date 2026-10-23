@@ -19,6 +19,8 @@ export const completeUploadSchema = z.object({
   sessionId: z.string().min(1).max(100),
   code: z.string().optional(),
   bundleId: z.string().optional(),
+  expirationSeconds: z.number().int().refine((val) => [60, 900, 1800, 2700, 3600, 7200].includes(val), { message: "Invalid expiration duration." }).optional(),
+  downloadLimit: z.number().int().positive().max(1000).nullable().optional(),
   parts: z
     .array(
       z.object({

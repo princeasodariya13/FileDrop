@@ -314,7 +314,8 @@ export function useFileUpload() {
             sessionIdRef.current,
             partsToComplete,
             batchCodeRef.current,
-            bundleIdRef.current
+            bundleIdRef.current,
+            optionsRef.current
           );
           break;
         } catch (err: any) {
@@ -346,9 +347,16 @@ export function useFileUpload() {
 
   const batchCodeRef = useRef<string | undefined>(undefined);
   const bundleIdRef = useRef<string | undefined>(undefined);
+  const optionsRef = useRef<UploadOptions | undefined>(undefined);
 
   const upload = useCallback(
-    async (file: File, options: UploadOptions, batchCode?: string, bundleId?: string): Promise<CompleteUploadResponse | null> => {
+    async (
+      file: File,
+      options: UploadOptions,
+      batchCode?: string,
+      bundleId?: string,
+      prewarmedSession?: Promise<any> | any
+    ): Promise<CompleteUploadResponse | null> => {
       userCancelControllerRef.current = new AbortController();
       partProgressRef.current = new Map();
       completedPartsRef.current = new Map();
@@ -358,22 +366,14 @@ export function useFileUpload() {
       fileRef.current = file;
       batchCodeRef.current = batchCode;
       bundleIdRef.current = bundleId;
+      optionsRef.current = options;
 
       try {
-        setState({ ...initialState, status: "validating", totalBytes: file.size });
-        setState((s) => ({ ...s, status: "reserving" }));
+        setState({ ...initialState, status: "reserving", totalBytes: file.size });
 
-        // Storage reservation check completes on backend in <100ms; transition to initializing if session setup is ongoing
-        const initTimer = setTimeout(() => {
-          setState((s) => (s.status === "reserving" ? { ...s, status: "initializing" } : s));
-        }, 600);
-
-        let session;
-        try {
-          session = await createUploadSession(file, options);
-        } finally {
-          clearTimeout(initTimer);
-        }
+        const session = prewarmedSession
+          ? await prewarmedSession
+          : await createUploadSession(file, options);
 
         sessionIdRef.current = session.sessionId;
         queueRef.current = session.parts;
