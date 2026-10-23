@@ -1130,6 +1130,55 @@ export function useConnectRoom(initialCode?: string) {
     push(`Left Room ${codeToLeave}`, "info");
   };
 
+  // Permanently delete room (Host only)
+  const deleteRoom = async (targetRoomCode?: string) => {
+    const codeToDelete = targetRoomCode || currentRoomCode || room?.roomCode;
+    if (!codeToDelete) return;
+
+    addLeftRoomCode(codeToDelete);
+
+    const map = getStoredSessionsMap();
+    const session = map[codeToDelete];
+
+    if (session) {
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          "x-device-id": session.deviceId,
+          "x-device-token": session.deviceToken,
+        };
+
+        await fetch(`${API_BASE}/api/rooms/${codeToDelete}`, {
+          method: "DELETE",
+          headers,
+        });
+      } catch (e) {
+        console.warn("Network error while deleting room:", e);
+      }
+    }
+
+    const nextActiveCode = removeStoredSession(codeToDelete);
+    removeCachedRoomState(codeToDelete);
+
+    setActiveRooms((prev) => prev.filter((r) => r.roomCode !== codeToDelete));
+
+    if (codeToDelete === currentRoomCode || codeToDelete === room?.roomCode) {
+      cleanupSocket();
+      if (nextActiveCode) {
+        await switchRoom(nextActiveCode);
+      } else {
+        setRoom(null);
+        setDeviceId(null);
+        setDeviceToken(null);
+        setIsHost(false);
+        setCurrentRoomCode(null);
+      }
+    }
+
+    refreshActiveRoomsList();
+    push(`Room #${codeToDelete} deleted permanently`, "info");
+  };
+
   // Instant session restoration from localStorage + non-blocking background network synchronization
   useEffect(() => {
     let isCancelled = false;
@@ -1351,6 +1400,7 @@ export function useConnectRoom(initialCode?: string) {
     removeDeviceFromRoom,
     updateDeviceName,
     leaveRoom,
+    deleteRoom,
     refreshActiveRoomsList,
   };
 }

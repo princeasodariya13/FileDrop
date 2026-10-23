@@ -33,6 +33,7 @@ export function ConnectDevicesSection() {
     removeDeviceFromRoom,
     updateDeviceName,
     leaveRoom,
+    deleteRoom,
   } = useConnectRoom();
 
   const [inputCode, setInputCode] = useState<string>("");
@@ -66,6 +67,7 @@ export function ConnectDevicesSection() {
         onRemoveDevice={removeDeviceFromRoom}
         onUpdateDeviceName={updateDeviceName}
         onLeaveRoom={leaveRoom}
+        onDeleteRoom={deleteRoom}
       />
     );
   }

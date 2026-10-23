@@ -23,12 +23,11 @@ import {
   broadcastFileRecipientsUpdated,
   broadcastFileDeleted,
   broadcastDevicesUpdated,
+  broadcastRoomClosed,
   handleDeviceRemoved,
   handleDeviceVoluntaryLeave,
 } from "@/services/socket.service";
 import { logger } from "@/utils/logger";
-
-const ROOM_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function sanitizeDevices(devices: IRoomDevice[]) {
   return devices.map((d) => ({
@@ -104,7 +103,6 @@ export async function createRoom(req: Request, res: Response, next: NextFunction
       const existing = await RoomModel.findOne({
         roomCode: candidate,
         status: "active",
-        expiresAt: { $gt: now },
       });
       if (!existing) {
         roomCode = candidate;
@@ -119,7 +117,6 @@ export async function createRoom(req: Request, res: Response, next: NextFunction
     const roomId = generateRoomId();
     const deviceId = generateDeviceId();
     const deviceToken = generateDeviceToken();
-    const expiresAt = new Date(Date.now() + ROOM_TTL_MS);
 
     const ip = req.ip || req.socket.remoteAddress || "unknown";
     const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
@@ -144,7 +141,7 @@ export async function createRoom(req: Request, res: Response, next: NextFunction
       status: "active",
       devices: [hostDevice],
       files: [],
-      expiresAt,
+      expiresAt: null,
       lastActivityAt: now,
     });
 
@@ -156,7 +153,7 @@ export async function createRoom(req: Request, res: Response, next: NextFunction
       roomName: room.roomName,
       deviceId,
       deviceToken,
-      expiresAt: room.expiresAt,
+      expiresAt: null,
       status: room.status,
       devices: sanitizeDevices(room.devices),
       files: room.files,
@@ -182,7 +179,6 @@ export async function joinRoom(req: Request, res: Response, next: NextFunction) 
     const room = await RoomModel.findOne({
       roomCode: code,
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -222,7 +218,7 @@ export async function joinRoom(req: Request, res: Response, next: NextFunction) 
       deviceId,
       deviceToken,
       isHost: false,
-      expiresAt: room.expiresAt,
+      expiresAt: room.expiresAt || null,
       status: room.status,
       devices: sanitizeDevices(room.devices),
       files: syncedFiles,
@@ -239,12 +235,10 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
   try {
     const ip = req.ip || req.socket.remoteAddress || "unknown";
     const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
-    const now = new Date();
 
     const activeRoomsList = await RoomModel.find({
       "devices.ipHash": ipHash,
       status: "active",
-      expiresAt: { $gt: now },
     }).sort({ lastActivityAt: -1 });
 
     if (!activeRoomsList || activeRoomsList.length === 0) {
@@ -262,7 +256,7 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
             roomId: r.roomId,
             roomName: r.roomName || "Live Room",
             status: r.status,
-            expiresAt: r.expiresAt,
+            expiresAt: r.expiresAt || null,
             lastActivityAt: r.lastActivityAt,
             isHost: myDev ? myDev.isHost : false,
             deviceId: myDev?.deviceId,
@@ -287,6 +281,7 @@ export async function getActiveRoomForClient(req: Request, res: Response, next: 
 /**
  * POST /api/rooms/user-active-rooms — Fetch and validate all active rooms for a user across multiple sessions
  * Request body: { sessions: Array<{ roomCode: string; deviceId: string; deviceToken: string }> }
+ * Highly optimized batch retrieval with O(1) query roundtrips.
  */
 export async function getUserActiveRooms(req: Request, res: Response, next: NextFunction) {
   try {
@@ -308,15 +303,31 @@ export async function getUserActiveRooms(req: Request, res: Response, next: Next
       return ok(res, { activeRooms: [], removedRoomCodes: [] });
     }
 
+    // Single query for all requested rooms that are currently active
     const rooms = await RoomModel.find({
       roomCode: { $in: codes },
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     const roomByCode = new Map(rooms.map((r) => [r.roomCode, r]));
+
+    // Batch query active files across all retrieved rooms in one roundtrip
+    const allFileIds = Array.from(
+      new Set(rooms.flatMap((r) => (r.files || []).map((f) => f.fileId)))
+    );
+
+    let activeDbFileIdSet = new Set<string>();
+    if (allFileIds.length > 0) {
+      const activeDbFiles = await FileModel.find({
+        fileId: { $in: allFileIds },
+        status: { $in: ["active", "deleted"] },
+      }).select("fileId");
+      activeDbFileIdSet = new Set(activeDbFiles.map((f) => f.fileId));
+    }
+
     const activeRooms: any[] = [];
     const removedRoomCodes: string[] = [];
+    const bulkTouchOps: any[] = [];
 
     for (const session of sessions) {
       const code = typeof session?.roomCode === "string" ? session.roomCode.trim() : "";
@@ -328,7 +339,7 @@ export async function getUserActiveRooms(req: Request, res: Response, next: Next
         continue;
       }
 
-      // Verify that this user's device is an active member with matching credentials
+      // Verify device credentials for this specific room
       const userDevice = room.devices.find(
         (d) => d.deviceId === session.deviceId && d.deviceToken === session.deviceToken
       );
@@ -338,30 +349,45 @@ export async function getUserActiveRooms(req: Request, res: Response, next: Next
         continue;
       }
 
-      // Touch device last seen
+      // Queue touch operation for bulk execution
       userDevice.lastSeenAt = now;
-      await RoomModel.updateOne(
-        { _id: room._id, "devices.deviceId": session.deviceId },
-        { $set: { "devices.$.lastSeenAt": now } }
-      );
+      bulkTouchOps.push({
+        updateOne: {
+          filter: { _id: room._id, "devices.deviceId": session.deviceId },
+          update: { $set: { "devices.$.lastSeenAt": now } },
+        },
+      });
 
-      const syncedFiles = await syncRoomFiles(room, session.deviceId);
+      // Filter valid files in memory instantly
+      const validFiles = (room.files || []).filter((f) => activeDbFileIdSet.has(f.fileId));
+      const callerFiles = validFiles.filter((f) => {
+        if (!f.recipientDeviceIds || f.recipientDeviceIds.length === 0) return true;
+        return (
+          f.uploadedByDeviceId === session.deviceId ||
+          f.recipientDeviceIds.includes(session.deviceId)
+        );
+      });
 
       activeRooms.push({
         roomCode: room.roomCode,
         roomId: room.roomId,
         roomName: room.roomName || "Live Room",
         status: room.status,
-        expiresAt: room.expiresAt,
+        expiresAt: room.expiresAt || null,
         lastActivityAt: room.lastActivityAt,
         isHost: userDevice.isHost,
         deviceId: userDevice.deviceId,
         participantCount: room.devices.length,
         devicesCount: room.devices.length,
         devices: sanitizeDevices(room.devices),
-        filesCount: syncedFiles.length,
-        files: syncedFiles,
+        filesCount: callerFiles.length,
+        files: callerFiles,
       });
+    }
+
+    // Fire non-blocking bulk touch in background
+    if (bulkTouchOps.length > 0) {
+      RoomModel.bulkWrite(bulkTouchOps, { ordered: false }).catch(() => {});
     }
 
     return ok(res, {
@@ -389,7 +415,6 @@ export async function getRoomState(req: Request, res: Response, next: NextFuncti
     const room = await RoomModel.findOne({
       $or: [{ roomCode: code }, { roomId: code }],
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -417,7 +442,7 @@ export async function getRoomState(req: Request, res: Response, next: NextFuncti
       roomId: room.roomId,
       roomName: room.roomName || "Live Room",
       status: room.status,
-      expiresAt: room.expiresAt,
+      expiresAt: room.expiresAt || null,
       lastActivityAt: room.lastActivityAt,
       devices: sanitizeDevices(room.devices),
       files: syncedFiles,
@@ -438,12 +463,10 @@ export async function getRoomFiles(req: Request, res: Response, next: NextFuncti
     }
 
     const code = rawCode.trim();
-    const now = new Date();
 
     const room = await RoomModel.findOne({
       $or: [{ roomCode: code }, { roomId: code }],
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -486,7 +509,6 @@ export async function addFileToRoom(req: Request, res: Response, next: NextFunct
     const room = await RoomModel.findOne({
       $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -510,7 +532,6 @@ export async function addFileToRoom(req: Request, res: Response, next: NextFunct
     const fileQuery: Record<string, unknown> = {
       fileId,
       status: "active",
-      expiresAt: { $gt: now },
     };
     if (possessionToken) {
       fileQuery.possessionToken = possessionToken;
@@ -549,9 +570,8 @@ export async function addFileToRoom(req: Request, res: Response, next: NextFunct
       room.files.push(addedFile);
     }
 
-    // Refresh room activity and extend TTL
+    // Refresh room activity (permanent room maintains null expiresAt)
     room.lastActivityAt = now;
-    room.expiresAt = new Date(Date.now() + ROOM_TTL_MS);
     await room.save();
 
     logger.info({ roomId: room.roomId, roomCode: room.roomCode, fileId: file.fileId }, "File attached to room");
@@ -586,11 +606,9 @@ export async function downloadRoomFile(req: Request, res: Response, next: NextFu
     const callerDeviceId = req.headers["x-device-id"] as string;
     const callerDeviceToken = req.headers["x-device-token"] as string;
 
-    const now = new Date();
     const room = await RoomModel.findOne({
       $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -628,7 +646,6 @@ export async function downloadRoomFile(req: Request, res: Response, next: NextFu
     const file = await FileModel.findOne({
       fileId,
       status: { $in: ["active", "deleted"] },
-      expiresAt: { $gt: now },
     });
 
     if (!file) {
@@ -697,7 +714,6 @@ export async function leaveRoom(req: Request, res: Response, next: NextFunction)
     const room = await RoomModel.findOne({
       $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -714,26 +730,16 @@ export async function leaveRoom(req: Request, res: Response, next: NextFunction)
     const wasHost = leavingDevice.isHost;
 
     if (remainingDevices.length === 0) {
-      // Last participant left -> close room cleanly
-      room.devices = [];
-      room.status = "closed";
+      // Permanent room: retain host record so creator can return anytime; room stays active until host explicitly calls deleteRoom
       room.lastActivityAt = now;
       await room.save();
 
       logger.info(
         { roomId: room.roomId, roomCode: room.roomCode, deviceId: callerDeviceId },
-        "Room closed as last participant left voluntarily"
+        "Last participant navigated away; permanent room kept active for host return"
       );
 
-      await handleDeviceVoluntaryLeave(
-        room.roomCode,
-        callerDeviceId,
-        leavingDevice.deviceName,
-        [],
-        true
-      );
-
-      return ok(res, { success: true, roomClosed: true });
+      return ok(res, { success: true, roomClosed: false });
     }
 
     if (wasHost) {
@@ -811,7 +817,6 @@ export async function deleteRoomFile(req: Request, res: Response, next: NextFunc
     const room = await RoomModel.findOne({
       $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -861,7 +866,6 @@ export async function deleteRoomFile(req: Request, res: Response, next: NextFunc
           _id: { $ne: room._id },
           "files.fileId": fileId,
           status: "active",
-          expiresAt: { $gt: now },
         });
 
         if (!isQuickShare && !otherRoomUsingFile) {
@@ -926,7 +930,6 @@ export async function updateRoomFileRecipients(req: Request, res: Response, next
     const room = await RoomModel.findOne({
       $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -1021,7 +1024,6 @@ export async function removeRoomDevice(req: Request, res: Response, next: NextFu
     const room = await RoomModel.findOne({
       $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -1125,7 +1127,6 @@ export async function updateRoomDeviceName(req: Request, res: Response, next: Ne
     const room = await RoomModel.findOne({
       $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
       status: "active",
-      expiresAt: { $gt: now },
     });
 
     if (!room) {
@@ -1162,6 +1163,64 @@ export async function updateRoomDeviceName(req: Request, res: Response, next: Ne
       deviceId: callerDeviceId,
       deviceName,
       devices: sanitized,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * DELETE /api/rooms/:code — Delete a room permanently (Host only)
+ */
+export async function deleteRoom(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rawCode = req.params.code;
+    if (!rawCode || typeof rawCode !== "string") {
+      throw new ApiError(400, "INVALID_CODE", "Room code or ID is required.");
+    }
+
+    const callerDeviceId = req.headers["x-device-id"] as string;
+    const callerDeviceToken = req.headers["x-device-token"] as string;
+
+    if (!callerDeviceId || !callerDeviceToken) {
+      throw new ApiError(401, "UNAUTHORIZED", "Host device credentials required to delete room.");
+    }
+
+    const room = await RoomModel.findOne({
+      $or: [{ roomCode: rawCode.trim() }, { roomId: rawCode.trim() }],
+      status: "active",
+    });
+
+    if (!room) {
+      throw new ApiError(404, "ROOM_NOT_FOUND", "Room not found or already closed.");
+    }
+
+    // Authenticate host credentials
+    const hostDevice = room.devices.find(
+      (d) => d.deviceId === callerDeviceId && d.deviceToken === callerDeviceToken
+    );
+
+    if (!hostDevice || !hostDevice.isHost || room.hostDeviceId !== callerDeviceId) {
+      throw new ApiError(403, "FORBIDDEN", "Only the room host can delete this room.");
+    }
+
+    // Permanently close the room
+    room.status = "closed";
+    room.lastActivityAt = new Date();
+    await room.save();
+
+    logger.info(
+      { roomId: room.roomId, roomCode: room.roomCode, hostDeviceId: callerDeviceId },
+      "Host deleted room permanently"
+    );
+
+    // Notify all participants in real time via Socket.IO
+    broadcastRoomClosed(room.roomCode, "closed");
+
+    return ok(res, {
+      success: true,
+      roomCode: room.roomCode,
+      message: "Room deleted successfully.",
     });
   } catch (err) {
     next(err);

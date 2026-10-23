@@ -40,6 +40,7 @@ function RoomContent({ code }: RoomPageClientProps) {
     removeDeviceFromRoom,
     updateDeviceName,
     leaveRoom,
+    deleteRoom,
   } = useConnectRoom(code);
 
   const [deviceName, setDeviceName] = useState<string>(() => getSmartDeviceName().deviceName);
@@ -119,6 +120,7 @@ function RoomContent({ code }: RoomPageClientProps) {
         onRemoveDevice={removeDeviceFromRoom}
         onUpdateDeviceName={updateDeviceName}
         onLeaveRoom={leaveRoom}
+        onDeleteRoom={deleteRoom}
       />
     );
   }

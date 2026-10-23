@@ -36,6 +36,7 @@ interface RoomViewProps {
   onRemoveDevice?: (deviceId: string) => Promise<void>;
   onUpdateDeviceName?: (newName: string) => Promise<void>;
   onLeaveRoom: () => void;
+  onDeleteRoom?: () => Promise<void>;
 }
 
 export function RoomView({
@@ -58,6 +59,7 @@ export function RoomView({
   onRemoveDevice,
   onUpdateDeviceName,
   onLeaveRoom,
+  onDeleteRoom,
 }: RoomViewProps) {
   const [mounted, setMounted] = useState<boolean>(false);
   const [isEditDeviceModalOpen, setIsEditDeviceModalOpen] = useState(false);
@@ -320,7 +322,11 @@ export function RoomView({
   const handleConfirmLeave = async () => {
     setIsLeaving(true);
     try {
-      await onLeaveRoom();
+      if (isHost && onDeleteRoom) {
+        await onDeleteRoom();
+      } else {
+        await onLeaveRoom();
+      }
       setIsLeaveModalOpen(false);
     } catch (err) {
       // Toast is handled in hook
@@ -534,23 +540,41 @@ export function RoomView({
               size="sm"
               onClick={() => setIsLeaveModalOpen(true)}
               className="text-xs py-1.5 px-2.5 sm:px-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
+              title={isHost ? "Delete this room permanently" : "Leave this room"}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="mr-1.5 shrink-0"
-              >
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              Leave Room
+              {isHost ? (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mr-1.5 shrink-0"
+                >
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              ) : (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mr-1.5 shrink-0"
+                >
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+              )}
+              {isHost ? "Delete Room" : "Leave Room"}
             </Button>
           </div>
         </div>
@@ -1427,41 +1451,55 @@ export function RoomView({
           <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up z-[100000]">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
+                {isHost ? (
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                ) : (
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                )}
               </div>
               <div>
-                <h3 className="text-sm font-bold font-heading modal-title">Leave Live Room?</h3>
-                <p className="text-xs modal-sub">Disconnect from #{room.roomCode}</p>
+                <h3 className="text-sm font-bold font-heading modal-title">
+                  {isHost ? "Delete Room Permanently?" : "Leave Live Room?"}
+                </h3>
+                <p className="text-xs modal-sub">
+                  {isHost ? `Permanently remove room #${room.roomCode}` : `Disconnect from #${room.roomCode}`}
+                </p>
               </div>
             </div>
 
             <p className="text-xs modal-body leading-relaxed">
-              {isHost && room.devices.length > 1 ? (
+              {isHost ? (
                 <>
-                  You are the host. If you leave, host ownership will be automatically transferred to
-                  another connected device. Shared files will remain available to other participants.
-                </>
-              ) : isHost && room.devices.length <= 1 ? (
-                <>
-                  You are the only device in this room. If you leave, this live room session will end.
+                  Are you sure you want to permanently delete this room? This room will be closed and removed for all connected devices.
                 </>
               ) : (
                 <>
-                  Are you sure you want to leave this room? You will need to enter the 6-digit code or
-                  scan the QR code again to reconnect.
+                  Are you sure you want to leave this room? You can reconnect anytime by entering the 6-digit code or scanning the QR code.
                 </>
               )}
             </p>
@@ -1471,17 +1509,23 @@ export function RoomView({
                 type="button"
                 disabled={isLeaving}
                 onClick={() => setIsLeaveModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-semibold modal-cancel-btn transition-colors cursor-pointer"
               >
-                Stay
+                Cancel
               </button>
               <button
                 type="button"
                 disabled={isLeaving}
                 onClick={handleConfirmLeave}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-md shadow-red-500/20 transition-all"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 shadow-md shadow-red-500/20 transition-all cursor-pointer"
               >
-                {isLeaving ? "Leaving..." : "Leave Room"}
+                {isLeaving
+                  ? isHost
+                    ? "Deleting..."
+                    : "Leaving..."
+                  : isHost
+                  ? "Delete Room"
+                  : "Leave Room"}
               </button>
             </div>
           </div>

@@ -45,12 +45,10 @@ async function authenticateDevice(
   const cleanCode = roomCode.trim();
   const cleanDeviceId = deviceId.trim();
   const cleanToken = deviceToken.trim();
-  const now = new Date();
 
   const room = await RoomModel.findOne({
     $or: [{ roomCode: cleanCode }, { roomId: cleanCode }],
     status: "active",
-    expiresAt: { $gt: now },
   });
 
   if (!room) {

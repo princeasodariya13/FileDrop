@@ -33,7 +33,7 @@ export interface IRoom extends Document {
   status: RoomStatus;
   devices: IRoomDevice[];
   files: IRoomFile[];
-  expiresAt: Date;
+  expiresAt?: Date | null;
   lastActivityAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -86,16 +86,16 @@ const RoomSchema = new Schema<IRoom>(
     },
     devices: { type: [RoomDeviceSchema], default: [] },
     files: { type: [RoomFileSchema], default: [] },
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, required: false, default: null },
     lastActivityAt: { type: Date, required: true, default: Date.now },
   },
   { timestamps: true }
 );
 
-RoomSchema.index({ status: 1, expiresAt: 1 });
+RoomSchema.index({ status: 1 });
 RoomSchema.index({ "devices.deviceId": 1 });
 RoomSchema.index({ "files.fileId": 1 });
-RoomSchema.index({ "devices.ipHash": 1, status: 1, expiresAt: 1 });
+RoomSchema.index({ "devices.ipHash": 1, status: 1 });
 RoomSchema.index({ creatorIpHash: 1, status: 1 });
 
 export const RoomModel = model<IRoom>("Room", RoomSchema);

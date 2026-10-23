@@ -13,6 +13,7 @@ import {
   updateRoomDeviceName,
   downloadRoomFile,
   leaveRoom,
+  deleteRoom,
 } from "@/controllers/room.controller";
 import {
   roomCreateLimiter,
@@ -46,5 +47,7 @@ router.patch("/:code/device-name", updateRoomDeviceName);
 router.post("/:code/files/:fileId/download", downloadUrlLimiter, downloadRoomFile);
 router.get("/:code/files/:fileId/download", downloadUrlLimiter, downloadRoomFile);
 router.post("/:code/leave", leaveRoom);
+router.delete("/:code", deleteRoom);
+router.post("/:code/delete", deleteRoom);
 
 export default router;

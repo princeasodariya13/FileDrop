@@ -30,7 +30,6 @@ export async function expireOverdueFiles(): Promise<number> {
         RoomModel.exists({
           "files.fileId": file.fileId,
           status: "active",
-          expiresAt: { $gt: now },
         }),
       ]);
 
@@ -172,7 +171,6 @@ export async function expireNoAccessFiles(): Promise<number> {
       RoomModel.exists({
         "files.fileId": file.fileId,
         status: "active",
-        expiresAt: { $gt: now },
       }),
     ]);
 
@@ -212,8 +210,9 @@ export async function sweepExpiredRooms(): Promise<number> {
   const { broadcastRoomClosed } = await import("@/services/socket.service");
   const now = new Date();
 
+  // Only expire rooms that have an explicit date set for expiresAt (permanent rooms have expiresAt: null)
   const expiredRooms = await RoomModel.find(
-    { status: "active", expiresAt: { $lte: now } },
+    { status: "active", expiresAt: { $type: "date", $lte: now } },
     { roomCode: 1 }
   ).limit(100);
 
