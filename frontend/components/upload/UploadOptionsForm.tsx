@@ -13,8 +13,8 @@ const EXPIRATION_CHOICES = [
 
 const DOWNLOAD_LIMIT_CHOICES = [
   { label: "Unlimited", value: null },
-  { label: "1 system", value: 1 },
-  { label: "5 systems", value: 5 },
+  { label: "1 download", value: 1 },
+  { label: "5 downloads", value: 5 },
 ];
 
 interface Props {
@@ -27,7 +27,7 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <fieldset disabled={disabled}>
-        <legend className="text-xs font-semibold text-ink-300 mb-2 uppercase tracking-wider">Expires in</legend>
+        <legend className="text-xs font-semibold text-ink-400 mb-2 uppercase tracking-wider font-mono">Expires in</legend>
         <div className="flex gap-2 flex-wrap">
           {EXPIRATION_CHOICES.map((choice) => (
             <button
@@ -35,10 +35,10 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
               type="button"
               aria-pressed={value.expirationSeconds === choice.value}
               onClick={() => onChange({ ...value, expirationSeconds: choice.value })}
-              className={`focus-ring rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
+              className={`focus-ring rounded-full border px-3.5 py-1.5 text-xs sm:text-sm font-medium transition-all ${
                 value.expirationSeconds === choice.value
-                  ? "border-accent-400 bg-brand-500/20 text-accent-100 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-[1.02]"
-                  : "border-surface-hover bg-surface text-ink-300 hover:border-brand-400/50 hover:bg-surface-hover hover:text-ink-100"
+                  ? "border-brand-500 bg-brand-500 text-white shadow-xs"
+                  : "border-surface-hover bg-surface/70 text-ink-400 hover:text-ink-50 hover:bg-surface"
               }`}
             >
               {choice.label}
@@ -48,8 +48,8 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
       </fieldset>
 
       <fieldset disabled={disabled}>
-        <legend className="text-xs font-semibold text-ink-300 mb-2 uppercase tracking-wider">Download limit</legend>
-        <div className="flex flex-col gap-3">
+        <legend className="text-xs font-semibold text-ink-400 mb-2 uppercase tracking-wider font-mono">Download limit</legend>
+        <div className="flex flex-col gap-2.5">
           <div className="flex gap-2 flex-wrap">
             {DOWNLOAD_LIMIT_CHOICES.map((choice) => (
               <button
@@ -57,10 +57,10 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
                 type="button"
                 aria-pressed={value.downloadLimit === choice.value}
                 onClick={() => onChange({ ...value, downloadLimit: choice.value })}
-                className={`focus-ring rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
+                className={`focus-ring rounded-full border px-3.5 py-1.5 text-xs sm:text-sm font-medium transition-all ${
                   value.downloadLimit === choice.value
-                    ? "border-accent-400 bg-brand-500/20 text-accent-100 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-[1.02]"
-                    : "border-surface-hover bg-surface text-ink-300 hover:border-brand-400/50 hover:bg-surface-hover hover:text-ink-100"
+                    ? "border-brand-500 bg-brand-500 text-white shadow-xs"
+                    : "border-surface-hover bg-surface/70 text-ink-400 hover:text-ink-50 hover:bg-surface"
                 }`}
               >
                 {choice.label}
@@ -70,10 +70,10 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
               type="button"
               aria-pressed={value.downloadLimit !== null && value.downloadLimit !== 1 && value.downloadLimit !== 5}
               onClick={() => onChange({ ...value, downloadLimit: 10 })}
-              className={`focus-ring rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
+              className={`focus-ring rounded-full border px-3.5 py-1.5 text-xs sm:text-sm font-medium transition-all ${
                 value.downloadLimit !== null && value.downloadLimit !== 1 && value.downloadLimit !== 5
-                  ? "border-accent-400 bg-brand-500/20 text-accent-100 shadow-[0_0_15px_rgba(168,85,247,0.15)] scale-[1.02]"
-                  : "border-surface-hover bg-surface text-ink-300 hover:border-brand-400/50 hover:bg-surface-hover hover:text-ink-100"
+                  ? "border-brand-500 bg-brand-500 text-white shadow-xs"
+                  : "border-surface-hover bg-surface/70 text-ink-400 hover:text-ink-50 hover:bg-surface"
               }`}
             >
               Custom
@@ -90,9 +90,9 @@ export function UploadOptionsForm({ value, onChange, disabled }: Props) {
                   const val = parseInt(e.target.value, 10);
                   onChange({ ...value, downloadLimit: isNaN(val) ? 10 : Math.max(1, Math.min(1000, val)) });
                 }}
-                className="focus-ring w-24 rounded-xl border border-surface-hover bg-surface px-3 py-1.5 text-sm font-medium text-ink-100 outline-none transition-colors focus:border-brand-400 focus:bg-surface-hover"
+                className="focus-ring w-24 rounded-full border border-surface-hover bg-surface px-3 py-1.5 text-xs font-medium text-ink-100 outline-none transition-colors focus:border-brand-500"
               />
-              <span className="text-sm text-ink-400">systems</span>
+              <span className="text-xs text-ink-400 font-mono">downloads</span>
             </div>
           )}
         </div>

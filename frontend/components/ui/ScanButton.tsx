@@ -11,7 +11,7 @@ export function ScanButton() {
       <button
         type="button"
         onClick={() => setIsScannerOpen(true)}
-        className="focus-ring inline-flex h-9 items-center justify-center gap-1.5 px-2.5 sm:px-3 rounded-xl bg-surface border border-surface-hover text-ink-300 hover:bg-surface-hover hover:text-brand-400 transition-all hover:scale-105 active:scale-95"
+        className="focus-ring inline-flex h-8 sm:h-9 items-center justify-center gap-1.5 px-3 sm:px-3.5 rounded-full bg-surface border border-surface-hover text-ink-300 hover:bg-surface-hover hover:text-brand-500 transition-all hover:scale-105 active:scale-95 text-xs font-medium"
         title="Scan File QR Code"
         aria-label="Scan QR Code"
       >

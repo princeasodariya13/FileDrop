@@ -77,21 +77,21 @@ function UploadItem({
   };
 
   return (
-    <Card className="p-4 bg-surface border border-surface-hover relative overflow-hidden animate-fade-in-scale">
+    <Card className="p-4 bg-surface/50 border border-surface-hover rounded-2xl relative overflow-hidden animate-fade-in-scale shadow-xs">
       <div className="flex flex-col gap-4">
         <div>
           <div className="flex items-center justify-between gap-2">
             <h4 className="text-sm font-medium text-ink-50 truncate font-heading">{upload.fileName}</h4>
             {upload.code && (
-              <span className="shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-brand-500/10 border border-brand-500/20 text-brand-300">
+              <span className="shrink-0 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/20 text-brand-500">
                 Code: {upload.code}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 mt-1 text-xs text-ink-400 font-mono">
+          <div className="flex items-center gap-3 mt-1.5 text-xs text-ink-400 font-mono">
             <span>{formatBytes(upload.sizeBytes)}</span>
             <span>&bull;</span>
-            <span className={expiryText === "expired" ? "text-red-400" : "text-brand-400"}>
+            <span className={expiryText === "expired" ? "text-red-400" : "text-brand-500 font-medium"}>
               {expiryText === "expired" ? "expired" : `expires ${expiryText}`}
             </span>
           </div>

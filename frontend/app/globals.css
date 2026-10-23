@@ -2,89 +2,97 @@
 
 :root {
   /* Dark Theme variables (default for FileDrop) */
-  --ink-50: #fafafa;
+  --ink-50: #fbfbfb;
   --ink-100: #f4f4f5;
   --ink-200: #e4e4e7;
   --ink-300: #d4d4d8;
   --ink-400: #a1a1aa;
-  --ink-600: #52525b;
+  --ink-600: #71717a;
   --ink-800: #27272a;
   --ink-900: #18181b;
 
-  --bg-base: #050507;
-  --bg-panel: #13131a;
+  --bg-base: #0b0b0d;
+  --bg-panel: #121215;
   --border-color: rgba(255, 255, 255, 0.08);
-  --bg-gradient-1: rgba(99, 102, 241, 0.12);
-  --bg-gradient-2: rgba(168, 85, 247, 0.12);
+  --border-color-hover: rgba(255, 255, 255, 0.16);
 
-  --card-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --surface: rgba(255, 255, 255, 0.05);
-  --surface-hover: rgba(255, 255, 255, 0.1);
+  --bg-gradient-1: rgba(241, 71, 12, 0.04);
+  --bg-gradient-2: rgba(0, 0, 0, 0);
+
+  --card-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.2), 0 8px 24px -4px rgba(0, 0, 0, 0.35);
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.08);
 
   /* Modal & Dropdown Tokens (Dark Default) */
-  --bg-modal: #13131a;
-  --border-modal: rgba(255, 255, 255, 0.12);
-  --text-modal-title: #fafafa;
+  --bg-modal: #121215;
+  --border-modal: rgba(255, 255, 255, 0.1);
+  --text-modal-title: #fbfbfb;
   --text-modal-body: #d4d4d8;
   --text-modal-sub: #a1a1aa;
-  --bg-modal-btn: rgba(255, 255, 255, 0.08);
-  --bg-modal-btn-hover: rgba(255, 255, 255, 0.15);
-  --text-modal-btn: #fafafa;
-  --border-modal-btn: rgba(255, 255, 255, 0.12);
-  --bg-dropdown: #14141c;
-  --border-dropdown: rgba(255, 255, 255, 0.12);
-  --text-dropdown: #fafafa;
-  --hover-dropdown: rgba(255, 255, 255, 0.08);
+  --bg-modal-btn: rgba(255, 255, 255, 0.06);
+  --bg-modal-btn-hover: rgba(255, 255, 255, 0.12);
+  --text-modal-btn: #fbfbfb;
+  --border-modal-btn: rgba(255, 255, 255, 0.1);
+  --bg-dropdown: #151518;
+  --border-dropdown: rgba(255, 255, 255, 0.1);
+  --text-dropdown: #fbfbfb;
+  --hover-dropdown: rgba(255, 255, 255, 0.06);
 }
 
 :root.light {
-  /* Light Theme variables */
-  --ink-50: #0f172a;
-  --ink-100: #1e293b;
-  --ink-200: #334155;
-  --ink-300: #475569;
-  --ink-400: #64748b;
-  --ink-600: #94a3b8;
-  --ink-800: #f1f5f9;
-  --ink-900: #f8fafc;
+  /* Light Theme variables (Clean Porcelain) */
+  --ink-50: #09090b;
+  --ink-100: #18181b;
+  --ink-200: #27272a;
+  --ink-300: #3f3f46;
+  --ink-400: #71717a;
+  --ink-600: #a1a1aa;
+  --ink-800: #f4f4f5;
+  --ink-900: #fafafa;
 
-  --bg-base: #f8fafc;
+  --bg-base: #fafafa;
   --bg-panel: #ffffff;
-  --border-color: #e2e8f0;
-  --bg-gradient-1: rgba(99, 102, 241, 0.05);
-  --bg-gradient-2: rgba(168, 85, 247, 0.05);
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-color-hover: rgba(0, 0, 0, 0.16);
+  --bg-gradient-1: rgba(241, 71, 12, 0.02);
+  --bg-gradient-2: rgba(0, 0, 0, 0);
 
-  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
-  --surface: #f1f5f9;
-  --surface-hover: #e2e8f0;
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+  --surface: #f4f4f5;
+  --surface-hover: #e4e4e7;
 
   /* Modal & Dropdown Tokens (Light) */
   --bg-modal: #ffffff;
-  --border-modal: #e2e8f0;
-  --text-modal-title: #0f172a;
-  --text-modal-body: #334155;
-  --text-modal-sub: #64748b;
-  --bg-modal-btn: #f1f5f9;
-  --bg-modal-btn-hover: #e2e8f0;
-  --text-modal-btn: #0f172a;
-  --border-modal-btn: #cbd5e1;
+  --border-modal: rgba(0, 0, 0, 0.08);
+  --text-modal-title: #09090b;
+  --text-modal-body: #27272a;
+  --text-modal-sub: #71717a;
+  --bg-modal-btn: #f4f4f5;
+  --bg-modal-btn-hover: #e4e4e7;
+  --text-modal-btn: #09090b;
+  --border-modal-btn: #e4e4e7;
   --bg-dropdown: #ffffff;
-  --border-dropdown: #e2e8f0;
-  --text-dropdown: #0f172a;
-  --hover-dropdown: #f1f5f9;
+  --border-dropdown: rgba(0, 0, 0, 0.08);
+  --text-dropdown: #09090b;
+  --hover-dropdown: #f4f4f5;
 }
 
 @theme {
-  /* Premium Brand Palette (shared across themes) */
-  --color-brand-50: #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-400: #818cf8;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-900: #312e81;
+  /* Sendrop-inspired Vibrant International Orange Palette */
+  --color-brand-50: #fff5f1;
+  --color-brand-100: #ffe8df;
+  --color-brand-200: #ffd0c0;
+  --color-brand-300: #ffa78b;
+  --color-brand-400: #ff7649;
+  --color-brand-500: #f1470c;
+  --color-brand-600: #d83a05;
+  --color-brand-700: #b42e03;
+  --color-brand-800: #912707;
+  --color-brand-900: #77240c;
+  --color-brand-950: #420f03;
 
-  --color-accent-400: #c084fc;
-  --color-accent-500: #a855f7;
+  --color-accent-400: #ff855f;
+  --color-accent-500: #f1470c;
 
   /* Ink (neutral) palette - mapped to dynamic CSS vars */
   --color-ink-50: var(--ink-50);
@@ -103,11 +111,11 @@
   --color-surface-hover: var(--surface-hover);
 
   /* Font families */
-  --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-heading: var(--font-outfit), "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: var(--font-outfit), var(--font-inter), sans-serif;
 
   /* Border radius */
-  --radius-card: 16px;
+  --radius-card: 24px;
 }
 
 /* Base styles */
@@ -117,8 +125,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-image:
-    radial-gradient(circle at 15% 50%, var(--bg-gradient-1), transparent 25%),
-    radial-gradient(circle at 85% 30%, var(--bg-gradient-2), transparent 25%);
+    radial-gradient(circle at 50% 0%, var(--bg-gradient-1), transparent 50%);
   background-attachment: fixed;
 }
 
@@ -147,6 +154,7 @@ body {
   border: 1px solid var(--border-modal);
   color: var(--text-modal-body);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+  border-radius: 24px;
 }
 
 .modal-title {
@@ -165,6 +173,7 @@ body {
   background-color: var(--bg-modal-btn);
   color: var(--text-modal-btn);
   border: 1px solid var(--border-modal-btn);
+  border-radius: 9999px;
 }
 
 .modal-cancel-btn:hover {
@@ -177,6 +186,7 @@ body {
   border: 1px solid var(--border-dropdown);
   color: var(--text-dropdown);
   box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.35);
+  border-radius: 20px;
 }
 
 /* Focus ring utility */
@@ -185,32 +195,34 @@ body {
 }
 
 .focus-ring:focus-visible {
-  outline: 2px solid var(--color-accent-400);
-  outline-offset: 3px;
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
 }
 
-/* Premium button gradients */
+/* Sendrop-style Solid Primary Button */
 .bg-btn-primary {
-  background: linear-gradient(135deg, var(--color-brand-500) 0%, var(--color-accent-500) 100%);
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: #f1470c;
+  color: #ffffff;
+  box-shadow: 0 1px 2px 0 rgba(241, 71, 12, 0.2), 0 4px 12px 0 rgba(241, 71, 12, 0.25);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .bg-btn-primary:hover {
-  background: linear-gradient(135deg, var(--color-brand-400) 0%, var(--color-accent-400) 100%);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+  background-color: #d83a05;
+  box-shadow: 0 2px 4px 0 rgba(241, 71, 12, 0.25), 0 6px 16px 0 rgba(241, 71, 12, 0.35);
   transform: translateY(-1px);
 }
 
 .bg-btn-primary:active {
-  transform: translateY(1px);
+  transform: translateY(0);
+  box-shadow: 0 1px 2px 0 rgba(241, 71, 12, 0.2);
 }
 
 /* Animations */
 @keyframes fadeInScale {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(10px);
+    transform: scale(0.97) translateY(8px);
   }
 
   to {
@@ -220,11 +232,10 @@ body {
 }
 
 .animate-fade-in-scale {
-  animation: fadeInScale 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes pulse-glow {
-
   0%,
   100% {
     opacity: 1;
@@ -232,8 +243,8 @@ body {
   }
 
   50% {
-    opacity: 0.8;
-    transform: scale(1.05);
+    opacity: 0.85;
+    transform: scale(1.03);
   }
 }
 

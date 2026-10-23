@@ -451,7 +451,7 @@ export function RoomView({
       )}
 
       {/* Room Header Card */}
-      <div className="rounded-card p-6 border border-brand-500/20 bg-surface/80 backdrop-blur-xl shadow-xl space-y-5">
+      <div className="rounded-3xl p-6 sm:p-8 border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-surface pb-5">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
@@ -634,12 +634,12 @@ export function RoomView({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         onClick={() => !isUploading && fileInputRef.current?.click()}
-        className={`rounded-card p-6 sm:p-8 border-2 border-dashed text-center transition-all ${
+        className={`rounded-3xl p-8 sm:p-10 border-2 border-dashed text-center transition-all ${
           isUploading
             ? "border-surface-hover bg-surface/30 opacity-70 cursor-not-allowed"
             : isDragOver
-            ? "border-brand-400 bg-brand-500/10 scale-[1.01] cursor-pointer"
-            : "border-surface-hover hover:border-brand-500/50 bg-surface/40 hover:bg-surface/60 cursor-pointer"
+            ? "border-brand-500 bg-brand-500/10 scale-[1.01] cursor-pointer"
+            : "border-surface-hover hover:border-brand-500/60 bg-surface/30 hover:bg-surface/50 cursor-pointer"
         }`}
       >
         <input
@@ -684,7 +684,7 @@ export function RoomView({
       {pendingFiles.length > 0 && (
         <div
           ref={dropdownRef}
-          className="relative z-20 rounded-card p-5 border border-brand-500/30 bg-surface/80 backdrop-blur-xl shadow-xl space-y-4 animate-fade-in overflow-visible"
+          className="relative z-20 rounded-3xl p-5 sm:p-6 border border-surface-hover bg-bg-panel/95 backdrop-blur-xl shadow-xs space-y-4 animate-fade-in overflow-visible"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-surface pb-3">
             <div className="space-y-0.5">
@@ -943,7 +943,7 @@ export function RoomView({
       )}
 
       {/* Shared Files Feed — Organized by Uploader */}
-      <div ref={sharedFilesRef} className="rounded-card p-6 border border-surface bg-surface/50 backdrop-blur-xl shadow-xl space-y-5">
+      <div ref={sharedFilesRef} className="rounded-3xl p-6 sm:p-8 border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs space-y-5">
         <div className="flex items-center justify-between border-b border-surface pb-3">
           <h3 className="text-sm font-bold font-heading text-ink-50 flex items-center gap-2">
             <span>Shared Room Files</span>

@@ -100,19 +100,19 @@ export function ConnectDevicesSection() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="rounded-card p-6 sm:p-8 border border-surface bg-surface/60 backdrop-blur-xl shadow-xl space-y-6">
+      <div className="rounded-3xl p-6 sm:p-8 border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs space-y-6">
         <div className="text-center space-y-2">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500/20 text-brand-400 mb-1">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500/10 text-brand-500 mb-1">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
               <line x1="8" y1="21" x2="16" y2="21" />
               <line x1="12" y1="17" x2="12" y2="21" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold font-heading text-ink-50">
+          <h2 className="text-xl font-bold font-heading text-ink-50 tracking-tight">
             Connect Devices &amp; Live Share
           </h2>
-          <p className="text-xs sm:text-sm text-ink-300 max-w-md mx-auto">
+          <p className="text-xs sm:text-sm text-ink-400 max-w-md mx-auto">
             Create or join a live multi-device room to share files instantly between phones, tablets, and computers.
           </p>
         </div>
@@ -128,12 +128,12 @@ export function ConnectDevicesSection() {
             maxLength={40}
             onChange={(e) => setDeviceName(e.target.value)}
             placeholder="e.g. MacBook, iPhone"
-            className="w-full rounded-xl bg-surface border border-surface-hover px-3.5 py-2 text-xs text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
+            className="w-full rounded-full bg-surface border border-surface-hover px-4 py-2.5 text-xs text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
           />
         </div>
 
         {error && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+          <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-center">
             <p className="text-xs text-red-400 font-medium">{error}</p>
           </div>
         )}
@@ -141,7 +141,7 @@ export function ConnectDevicesSection() {
         {/* Action Cards: Create vs Join */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
           {/* Card 1: Create Room */}
-          <div className="flex flex-col justify-between p-5 rounded-2xl bg-surface border border-surface-hover hover:border-brand-500/30 transition-all space-y-4">
+          <div className="flex flex-col justify-between p-5 rounded-2xl bg-surface/50 border border-surface-hover hover:border-brand-500/30 transition-all space-y-4">
             <div className="space-y-1.5">
               <h3 className="text-sm font-bold font-heading text-ink-50">
                 Create a New Room
@@ -151,7 +151,7 @@ export function ConnectDevicesSection() {
               </p>
             </div>
 
-            <form onSubmit={handleCreateRoom} className="space-y-2">
+            <form onSubmit={handleCreateRoom} className="space-y-2.5">
               <input
                 type="text"
                 maxLength={50}
@@ -163,8 +163,8 @@ export function ConnectDevicesSection() {
                     handleCreateRoom();
                   }
                 }}
-                placeholder="Room Name (e.g. Company Team, Friends)"
-                className="w-full rounded-xl bg-surface border border-surface-hover px-3.5 py-2 text-xs text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
+                placeholder="Room Name (e.g. Work, Friends)"
+                className="w-full rounded-full bg-surface border border-surface-hover px-4 py-2.5 text-xs text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
               />
               <Button
                 type="submit"
@@ -177,7 +177,7 @@ export function ConnectDevicesSection() {
           </div>
 
           {/* Card 2: Join Room */}
-          <div className="flex flex-col justify-between p-5 rounded-2xl bg-surface border border-surface-hover hover:border-brand-500/30 transition-all space-y-4">
+          <div className="flex flex-col justify-between p-5 rounded-2xl bg-surface/50 border border-surface-hover hover:border-brand-500/30 transition-all space-y-4">
             <div className="space-y-1.5">
               <h3 className="text-sm font-bold font-heading text-ink-50">
                 Join with 6-Digit Code
@@ -187,7 +187,7 @@ export function ConnectDevicesSection() {
               </p>
             </div>
 
-            <form onSubmit={handleJoinRoom} className="space-y-2">
+            <form onSubmit={handleJoinRoom} className="space-y-2.5">
               <div className="flex items-center gap-2 w-full">
                 <input
                   type="text"
@@ -201,12 +201,12 @@ export function ConnectDevicesSection() {
                     }
                   }}
                   placeholder="123456"
-                  className="min-w-0 flex-1 text-center font-mono text-base font-bold tracking-widest rounded-xl bg-surface border border-surface-hover px-3 py-2.5 text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
+                  className="min-w-0 flex-1 text-center font-mono text-base font-bold tracking-widest rounded-full bg-surface border border-surface-hover px-4 py-2.5 text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
                 />
                 <button
                   type="button"
                   onClick={() => setIsScannerOpen(true)}
-                  className="h-10 w-10 shrink-0 flex items-center justify-center rounded-xl bg-surface hover:bg-surface-hover border border-surface-hover text-brand-400 hover:text-brand-300 transition-colors cursor-pointer"
+                  className="h-10 w-10 shrink-0 flex items-center justify-center rounded-full bg-surface hover:bg-surface-hover border border-surface-hover text-brand-500 hover:text-brand-600 transition-colors cursor-pointer"
                   title="Scan QR Code"
                   aria-label="Scan QR Code"
                 >

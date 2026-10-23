@@ -104,13 +104,13 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col font-sans bg-bg-base text-ink-50 selection:bg-brand-500/30">
-        <header className="sticky top-0 z-50 bg-bg-base/60 backdrop-blur-xl border-b border-surface">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 py-4 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-3 focus-ring rounded-lg group">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl overflow-hidden shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow">
-                <Image src="/logo.png" alt="FileDrop Logo" width={36} height={36} priority className="object-cover scale-150" />
+        <header className="fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-5xl -translate-x-1/2 rounded-full border border-border-color bg-bg-panel/80 backdrop-blur-xl shadow-xs transition-colors">
+          <div className="mx-auto flex h-14 w-full items-center justify-between px-4 sm:px-6">
+            <Link href="/" className="flex items-center gap-2.5 focus-ring rounded-full group">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full overflow-hidden bg-brand-500 text-white shadow-sm group-hover:scale-105 transition-transform">
+                <Image src="/logo.png" alt="FileDrop Logo" width={32} height={32} priority className="object-cover scale-125" />
               </span>
-              <span className="font-heading font-semibold text-xl tracking-tight text-ink-50 group-hover:text-brand-500 transition-colors">FileDrop</span>
+              <span className="font-heading font-bold text-lg tracking-tight text-ink-50 group-hover:text-brand-500 transition-colors">FileDrop</span>
             </Link>
 
             <div className="flex items-center gap-2">

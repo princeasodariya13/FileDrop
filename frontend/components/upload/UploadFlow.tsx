@@ -293,14 +293,14 @@ export function UploadFlow() {
   return (
     <div className="space-y-6">
       {/* Send / Receive / Connect Mode Switcher - Always Visible */}
-      <div ref={modeSwitcherRef} className="flex items-center justify-center p-1.5 bg-surface border border-surface-hover rounded-2xl max-w-md mx-auto shadow-inner gap-1">
+      <div ref={modeSwitcherRef} className="flex items-center justify-center p-1.5 bg-surface/80 border border-surface-hover rounded-full max-w-md mx-auto shadow-xs backdrop-blur-md gap-1">
         <button
           type="button"
           onClick={() => handleTabChange("send")}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+          className={`flex-1 py-2 px-3 sm:px-4 rounded-full text-xs sm:text-sm font-semibold transition-all ${
             activeTab === "send"
-              ? "bg-btn-primary text-white shadow-lg shadow-brand-500/30"
-              : "text-ink-400 hover:text-ink-50"
+              ? "bg-brand-500 text-white shadow-sm"
+              : "text-ink-400 hover:text-ink-50 hover:bg-surface/60"
           }`}
         >
           Send Files
@@ -308,10 +308,10 @@ export function UploadFlow() {
         <button
           type="button"
           onClick={() => handleTabChange("receive")}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+          className={`flex-1 py-2 px-3 sm:px-4 rounded-full text-xs sm:text-sm font-semibold transition-all ${
             activeTab === "receive"
-              ? "bg-btn-primary text-white shadow-lg shadow-brand-500/30"
-              : "text-ink-400 hover:text-ink-50"
+              ? "bg-brand-500 text-white shadow-sm"
+              : "text-ink-400 hover:text-ink-50 hover:bg-surface/60"
           }`}
         >
           Receive Code
@@ -319,10 +319,10 @@ export function UploadFlow() {
         <button
           type="button"
           onClick={() => handleTabChange("connect")}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+          className={`flex-1 py-2 px-3 sm:px-4 rounded-full text-xs sm:text-sm font-semibold transition-all ${
             activeTab === "connect"
-              ? "bg-btn-primary text-white shadow-lg shadow-brand-500/30"
-              : "text-ink-400 hover:text-ink-50"
+              ? "bg-brand-500 text-white shadow-sm"
+              : "text-ink-400 hover:text-ink-50 hover:bg-surface/60"
           }`}
         >
           Connect Devices
@@ -378,16 +378,16 @@ export function UploadFlow() {
               <Dropzone onFilesSelected={handleFilesSelected} disabled={isBusy} />
 
               {selectedFiles.length > 0 && (
-                <div ref={selectedFilesRef} className="rounded-card p-6 space-y-6 animate-fade-in-scale">
+                <div ref={selectedFilesRef} className="rounded-3xl border border-border bg-bg-panel/90 backdrop-blur-xl shadow-card p-6 sm:p-7 space-y-6 animate-fade-in-scale">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-brand-300 uppercase tracking-wider font-mono">
+                      <span className="text-xs font-semibold text-brand-500 uppercase tracking-wider font-mono">
                         {selectedFiles.length} {selectedFiles.length === 1 ? "File Selected" : "Files Selected"} ({formatBytes(totalBatchSize)})
                       </span>
                       <button
                         type="button"
                         onClick={() => addFilesInputRef.current?.click()}
-                        className="text-xs text-brand-400 hover:text-brand-300 underline font-medium"
+                        className="text-xs text-brand-500 hover:text-brand-600 underline font-medium transition-colors"
                       >
                         + Add more files
                       </button>
@@ -409,11 +409,11 @@ export function UploadFlow() {
                       {selectedFiles.map((file, index) => (
                         <div
                           key={index}
-                          className="flex items-center justify-between bg-surface border border-surface-hover rounded-xl p-3"
+                          className="flex items-center justify-between bg-bg-surface/60 hover:bg-bg-surface border border-border/60 rounded-2xl p-3 transition-colors"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/20 text-brand-400">
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-500">
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                                 <path d="M13 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V9L13 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
                             </div>
@@ -426,7 +426,7 @@ export function UploadFlow() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleRemoveFile(index)}
-                            className="ml-2 text-xs py-1 px-2 hover:text-red-400 hover:bg-red-500/10"
+                            className="ml-2 text-xs py-1 px-3 rounded-full hover:text-red-500 hover:bg-red-500/10"
                           >
                             Remove
                           </Button>
@@ -438,12 +438,12 @@ export function UploadFlow() {
                   <UploadOptionsForm value={options} onChange={setOptions} />
 
                   {state.status === "failed" && (
-                    <p role="alert" className="text-sm text-red-600">
+                    <p role="alert" className="text-sm text-red-500">
                       {state.errorMessage}
                     </p>
                   )}
 
-                  <Button className="w-full" onClick={handleStart}>
+                  <Button className="w-full rounded-full py-3 text-sm font-semibold shadow-sm" onClick={handleStart}>
                     Upload {selectedFiles.length} {selectedFiles.length === 1 ? "File" : "Files"} &amp; get 1 Code
                   </Button>
                 </div>
@@ -452,8 +452,8 @@ export function UploadFlow() {
           )}
 
           {state.status === "failed" && !isBusy && selectedFiles.length === 0 && (
-            <div className="rounded-card p-6">
-              <p role="alert" className="text-sm text-red-600">
+            <div className="rounded-3xl border border-red-500/20 bg-red-500/5 p-6 text-center">
+              <p role="alert" className="text-sm text-red-500">
                 {state.errorMessage}
               </p>
             </div>

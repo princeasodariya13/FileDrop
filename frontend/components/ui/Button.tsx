@@ -10,7 +10,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<string, string> = {
   primary:
-    "bg-btn-primary text-white font-semibold shadow-md shadow-brand-500/20 hover:shadow-brand-500/30 disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none disabled:transform-none",
+    "bg-btn-primary text-white font-medium shadow-sm hover:shadow active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none disabled:transform-none",
   secondary:
     "bg-surface text-ink-50 border border-surface-hover hover:bg-surface-hover backdrop-blur-md font-medium disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
   ghost:
@@ -20,8 +20,8 @@ const variantClasses: Record<string, string> = {
 };
 
 const sizeClasses: Record<string, string> = {
-  sm: "h-9 px-4 text-sm font-semibold rounded-xl",
-  md: "h-11 px-6 text-sm font-semibold rounded-xl",
+  sm: "h-9 px-4 text-xs sm:text-sm font-medium rounded-full",
+  md: "h-11 px-6 text-sm font-medium rounded-full",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -29,7 +29,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       className={clsx(
-        "focus-ring inline-flex items-center justify-center gap-2 rounded-card font-medium transition-colors disabled:cursor-not-allowed",
+        "focus-ring inline-flex items-center justify-center gap-2 rounded-full font-medium transition-all duration-200 disabled:cursor-not-allowed select-none",
         variantClasses[variant],
         sizeClasses[size],
         className

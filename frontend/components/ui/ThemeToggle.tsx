@@ -33,7 +33,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggleTheme}
-      className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded-xl bg-surface border border-surface-hover text-ink-300 hover:bg-surface-hover hover:text-brand-400 transition-colors"
+      className="focus-ring inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-surface border border-surface-hover text-ink-300 hover:bg-surface-hover hover:text-brand-500 transition-colors"
       aria-label="Toggle theme"
     >
       {theme === "dark" ? (

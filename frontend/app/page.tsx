@@ -71,16 +71,20 @@ const jsonLd = {
 
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 sm:px-6 py-16 lg:py-24 animate-fade-in-scale">
+    <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-28 sm:pt-36 pb-16 lg:pb-24 animate-fade-in-scale">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <div className="mb-10 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold font-heading text-ink-50 tracking-tight">
-          Free online file sharing <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-400 to-accent-400">made simple</span>
+      <div className="mb-10 text-center space-y-4">
+        <div className="inline-flex items-center gap-2 rounded-full border border-surface-hover bg-surface/80 px-3.5 py-1 text-xs font-medium text-ink-300 backdrop-blur-md shadow-xs">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-brand-500 animate-pulse" />
+          No uploads wait · Up to 10GB · Instant transfer
+        </div>
+        <h1 className="text-4xl sm:text-6xl font-bold font-heading text-ink-50 tracking-tight leading-[1.1]">
+          Send huge files, <span className="text-brand-500">instantly.</span>
         </h1>
-        <p className="mt-4 text-base text-ink-300 max-w-xl mx-auto leading-relaxed">
+        <p className="text-sm sm:text-base text-ink-400 max-w-xl mx-auto leading-relaxed">
           Upload and transfer large files online up to 10GB with FileDrop. Create temporary file sharing links with instant expiration and no registration required.
         </p>
       </div>
@@ -89,23 +93,23 @@ export default function HomePage() {
       </ToastProvider>
 
       {/* Supporting Crawlable SEO Section */}
-      <section className="mt-16 pt-10 border-t border-surface grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-        <div className="p-4 space-y-2 rounded-2xl bg-surface/40 border border-surface-hover">
-          <h2 className="text-sm font-semibold text-ink-50 font-heading">Large File Transfer</h2>
+      <section className="mt-20 pt-10 border-t border-border-color grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+        <div className="p-5 space-y-2 rounded-3xl bg-surface/40 border border-surface-hover backdrop-blur-sm transition-all hover:border-brand-500/30 hover:bg-surface/60">
+          <h2 className="text-sm font-bold text-ink-50 font-heading">Large File Transfer</h2>
           <p className="text-xs text-ink-400 leading-relaxed">
             Upload and send large files up to 10GB using our fast online file transfer tool with zero file sharing registration.
           </p>
         </div>
 
-        <div className="p-4 space-y-2 rounded-2xl bg-surface/40 border border-surface-hover">
-          <h2 className="text-sm font-semibold text-ink-50 font-heading">Temporary File Sharing</h2>
+        <div className="p-5 space-y-2 rounded-3xl bg-surface/40 border border-surface-hover backdrop-blur-sm transition-all hover:border-brand-500/30 hover:bg-surface/60">
+          <h2 className="text-sm font-bold text-ink-50 font-heading">Temporary File Sharing</h2>
           <p className="text-xs text-ink-400 leading-relaxed">
             Set your preferred timer for temporary file upload. Shared files automatically expire and get removed permanently.
           </p>
         </div>
 
-        <div className="p-4 space-y-2 rounded-2xl bg-surface/40 border border-surface-hover">
-          <h2 className="text-sm font-semibold text-ink-50 font-heading">Instant Share Links &amp; Codes</h2>
+        <div className="p-5 space-y-2 rounded-3xl bg-surface/40 border border-surface-hover backdrop-blur-sm transition-all hover:border-brand-500/30 hover:bg-surface/60">
+          <h2 className="text-sm font-bold text-ink-50 font-heading">Instant Share Links &amp; Codes</h2>
           <p className="text-xs text-ink-400 leading-relaxed">
             Create a secure file sharing link or a 6-digit code to share files online quickly across any browser or device.
           </p>

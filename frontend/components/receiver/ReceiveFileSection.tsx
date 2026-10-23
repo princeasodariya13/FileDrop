@@ -302,14 +302,12 @@ export function ReceiveFileSection() {
   const isExpired = foundFile ? formatRelativeExpiry(foundFile.expiresAt, now) === "expired" : false;
 
   return (
-    <Card className="p-6 sm:p-8 relative overflow-hidden group border border-brand-500/20 shadow-[0_4px_30px_rgba(0,0,0,0.5)] animate-fade-in-scale">
-      <div className="absolute inset-0 bg-gradient-to-br from-brand-500/10 via-accent-500/5 to-transparent pointer-events-none" />
-
+    <Card className="p-6 sm:p-8 relative overflow-hidden group border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs rounded-3xl animate-fade-in-scale">
       <div className="relative z-10 text-center space-y-2 mb-6">
         <h2 className="text-xl sm:text-2xl font-bold font-heading text-ink-50 tracking-tight">
           Receive Files Online
         </h2>
-        <p className="text-xs sm:text-sm text-ink-300">
+        <p className="text-xs sm:text-sm text-ink-400">
           Enter the 6-digit code from your file transfer link to receive files without signup.
         </p>
       </div>
@@ -317,26 +315,26 @@ export function ReceiveFileSection() {
       {inlineToast && (
         <div
           role="alert"
-          className={`relative z-10 p-3.5 mb-5 rounded-xl border flex items-center gap-2.5 text-xs sm:text-sm font-medium animate-fade-in-scale ${
+          className={`relative z-10 p-3.5 mb-5 rounded-2xl border flex items-center gap-2.5 text-xs sm:text-sm font-medium animate-fade-in-scale ${
             inlineToast.tone === "success"
-              ? "bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-800 dark:text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
+              ? "bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-800 dark:text-emerald-200"
               : inlineToast.tone === "error"
-              ? "bg-red-500/10 dark:bg-red-500/15 border-red-500/30 text-red-800 dark:text-red-200 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
+              ? "bg-red-500/10 dark:bg-red-500/15 border-red-500/30 text-red-800 dark:text-red-200"
               : "bg-brand-500/10 dark:bg-brand-500/15 border-brand-500/30 text-brand-800 dark:text-brand-200"
           }`}
         >
           {inlineToast.tone === "success" ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-emerald-400">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-emerald-500">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           ) : inlineToast.tone === "error" ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-red-400">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-red-500">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
           ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brand-400">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brand-500">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="16" x2="12" y2="12" />
               <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -369,10 +367,10 @@ export function ReceiveFileSection() {
                 onChange={(e) => handleChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
                 onPaste={handlePaste}
-                className={`h-12 w-10 sm:h-14 sm:w-12 text-center text-xl sm:text-2xl font-bold font-mono rounded-xl transition-all outline-none ${
+                className={`h-12 w-10 sm:h-14 sm:w-12 text-center text-xl sm:text-2xl font-bold font-mono rounded-2xl transition-all outline-none ${
                   error
-                    ? "bg-red-500/10 border-2 border-red-500/50 text-red-300 focus:border-red-400 focus:ring-2 focus:ring-red-500/30"
-                    : "bg-surface border border-surface-hover text-brand-300 focus:border-brand-400 focus:bg-brand-500/10 focus:ring-2 focus:ring-brand-500/40"
+                    ? "bg-red-500/10 border-2 border-red-500/50 text-red-400 focus:border-red-400 focus:ring-2 focus:ring-red-500/20"
+                    : "bg-surface/80 border border-surface-hover text-brand-500 focus:border-brand-500 focus:bg-surface focus:ring-2 focus:ring-brand-500/20"
                 }`}
               />
             ))}

@@ -25,24 +25,23 @@ export function UploadProgressView({ fileName, progress, onCancel }: Props) {
   const canCancel = progress.status === "uploading" || progress.status === "reserving" || progress.status === "initializing";
 
   return (
-    <Card className="p-6 relative overflow-hidden group border border-brand-500/30 shadow-[0_0_40px_rgba(99,102,241,0.15)] animate-fade-in-scale">
-      <div className="absolute inset-0 bg-gradient-to-br from-brand-500/10 to-transparent pointer-events-none" />
+    <Card className="p-6 sm:p-8 relative overflow-hidden group border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs rounded-3xl animate-fade-in-scale">
       <div className="relative z-10 flex items-start justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface border border-surface-hover animate-pulse">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-500/10 text-brand-500 border border-brand-500/20">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-ink-50">{fileName}</p>
-            <p className="mt-0.5 text-xs text-brand-400 font-semibold uppercase tracking-wider">{STATUS_LABEL[progress.status] ?? progress.status}</p>
+            <p className="truncate text-sm font-semibold text-ink-50 font-heading">{fileName}</p>
+            <p className="mt-0.5 text-xs text-brand-500 font-semibold uppercase tracking-wider font-mono">{STATUS_LABEL[progress.status] ?? progress.status}</p>
           </div>
         </div>
         {canCancel && (
-          <Button variant="ghost" size="sm" onClick={onCancel} className="hover:text-red-400 hover:bg-red-500/10">
+          <Button variant="ghost" size="sm" onClick={onCancel} className="hover:text-red-400 hover:bg-red-500/10 text-xs">
             Cancel
           </Button>
         )}
@@ -57,17 +56,17 @@ export function UploadProgressView({ fileName, progress, onCancel }: Props) {
         className="relative mt-6 h-2 w-full overflow-hidden rounded-full bg-surface-hover"
       >
         <div
-          className="absolute inset-y-0 left-0 h-full rounded-full bg-btn-primary transition-[width] duration-300 ease-out shadow-[0_0_10px_rgba(168,85,247,0.5)]"
+          className="absolute inset-y-0 left-0 h-full rounded-full bg-brand-500 transition-[width] duration-300 ease-out"
           style={{ width: `${pct}%` }}
         />
       </div>
 
-      <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-ink-300 font-mono">
+      <div className="mt-3 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-ink-400 font-mono">
         <span>
-          {formatBytes(progress.bytesUploaded)} / {formatBytes(progress.totalBytes)} <span className="text-brand-400 ml-1">({pct}%)</span>
+          {formatBytes(progress.bytesUploaded)} / {formatBytes(progress.totalBytes)} <span className="text-brand-500 font-semibold ml-1">({pct}%)</span>
         </span>
         {progress.status === "uploading" && (
-          <span className="text-accent-400">
+          <span className="text-brand-500 font-medium">
             {formatSpeed(progress.speedBytesPerSec)} · {formatEta(progress.etaSeconds)}
           </span>
         )}
