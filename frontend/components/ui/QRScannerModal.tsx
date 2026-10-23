@@ -22,6 +22,18 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
   const scannedRef = useRef<boolean>(false);
   const barcodeDetectorRef = useRef<any>(null);
   const isDetectingRef = useRef<boolean>(false);
+  const lastScanTimestamp = useRef<number>(0);
+
+  const [hasCamera, setHasCamera] = useState<boolean | null>(null);
+  const [isLoadingCamera, setIsLoadingCamera] = useState<boolean>(true);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
+  const [hasTorch, setHasTorch] = useState<boolean>(false);
+  const [isTorchOn, setIsTorchOn] = useState<boolean>(false);
+  const [scannedSuccess, setScannedSuccess] = useState<boolean>(false);
+
+  const router = useRouter();
+  const { push } = useToast();
 
   useEffect(() => {
     setMounted(true);
@@ -35,16 +47,6 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       }
     }
   }, []);
-
-  const [hasCamera, setHasCamera] = useState<boolean | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
-  const [hasTorch, setHasTorch] = useState<boolean>(false);
-  const [isTorchOn, setIsTorchOn] = useState<boolean>(false);
-  const [scannedSuccess, setScannedSuccess] = useState<boolean>(false);
-
-  const router = useRouter();
-  const { push } = useToast();
 
   // Play a soft beep sound on successful scan
   const playBeep = useCallback(() => {
@@ -64,7 +66,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       osc.start();
       osc.stop(ctx.currentTime + 0.12);
     } catch (e) {
-      // Audio might not be permitted without gesture
+      // Audio might not be permitted without user gesture
     }
   }, []);
 
@@ -88,6 +90,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     }
     setIsTorchOn(false);
     setHasTorch(false);
+    setIsLoadingCamera(false);
   }, []);
 
   // Process decoded QR code
@@ -148,22 +151,31 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
           router.push(`/file/${encodeURIComponent(trimmed)}`);
         }
       }, 220);
-
     },
     [playBeep, push, stopCameraStream, onClose, router]
   );
 
-  // Scan frame loop - Ultra-fast with Native BarcodeDetector + downscaled jsQR fallback
+  // Scan frame loop - Ultra-fast with Native BarcodeDetector + downscaled jsQR fallback throttled to ~15fps
   const scanLoop = useCallback(async () => {
     if (!isScanningRef.current || scannedRef.current) return;
 
     const video = videoRef.current;
-    if (!video || video.readyState < video.HAVE_CURRENT_DATA) {
+    if (!video || video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
       if (isScanningRef.current && !scannedRef.current) {
         animFrameRef.current = requestAnimationFrame(scanLoop);
       }
       return;
     }
+
+    // Throttle decoding to at most once per 65ms (~15 fps) to save CPU and ensure 60fps video fluidity
+    const now = performance.now();
+    if (now - lastScanTimestamp.current < 65) {
+      if (isScanningRef.current && !scannedRef.current) {
+        animFrameRef.current = requestAnimationFrame(scanLoop);
+      }
+      return;
+    }
+    lastScanTimestamp.current = now;
 
     // 1. Hardware-accelerated Native BarcodeDetector (2-5ms execution directly on video element)
     if (barcodeDetectorRef.current && !isDetectingRef.current) {
@@ -176,7 +188,8 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
           return;
         }
       } catch (e) {
-        // Fallback to jsQR
+        // If BarcodeDetector failed unexpectedly, permanently switch to jsQR fallback
+        barcodeDetectorRef.current = null;
       } finally {
         isDetectingRef.current = false;
       }
@@ -184,15 +197,15 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
     if (scannedRef.current) return;
 
-    // 2. High-performance downscaled jsQR fallback (10-15ms execution)
+    // 2. High-performance downscaled jsQR fallback (4-8ms execution on ~480px canvas)
     const canvas = canvasRef.current;
     if (canvas) {
       const width = video.videoWidth;
       const height = video.videoHeight;
 
       if (width > 0 && height > 0) {
-        // Downscale to max 640px for 4x-8x faster pixel processing
-        const scale = Math.min(1, 640 / Math.max(width, height));
+        // Downscale to max 480px for lightning-fast pixel processing
+        const scale = Math.min(1, 480 / Math.max(width, height));
         const scanWidth = Math.round(width * scale);
         const scanHeight = Math.round(height * scale);
 
@@ -220,12 +233,128 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     }
   }, [handleDecodedData]);
 
+  // Connect stream to video element safely and trigger playback
+  const attachStreamToVideo = useCallback(
+    (stream: MediaStream) => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      video.srcObject = stream;
+      video.muted = true;
+      video.defaultMuted = true;
+      video.playsInline = true;
+      video.autoplay = true;
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+      video.setAttribute("muted", "true");
+
+      const onReady = async () => {
+        try {
+          await video.play();
+        } catch (err) {
+          console.warn("Video play error:", err);
+        }
+        setIsLoadingCamera(false);
+        isScanningRef.current = true;
+        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = requestAnimationFrame(scanLoop);
+      };
+
+      if (video.readyState >= 2 && video.videoWidth > 0) {
+        onReady();
+      } else {
+        video.onloadedmetadata = () => onReady();
+        video.oncanplay = () => onReady();
+      }
+    },
+    [scanLoop]
+  );
+
+  // Progressive camera stream requester with multi-level fallbacks
+  const acquireCameraStream = useCallback(async (preferredFacing: "environment" | "user"): Promise<MediaStream> => {
+    // Strategy 1: Ideal facingMode + resolution
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: preferredFacing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+    } catch (e1) {
+      console.warn("Camera strategy 1 failed, trying strategy 2:", e1);
+    }
+
+    // Strategy 2: Ideal facingMode without resolution constraint
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: preferredFacing },
+        },
+        audio: false,
+      });
+    } catch (e2) {
+      console.warn("Camera strategy 2 failed, trying opposite facingMode:", e2);
+    }
+
+    // Strategy 3: Flip facingMode (e.g. if laptop webcam doesn't support 'environment')
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: preferredFacing === "environment" ? "user" : "environment",
+        },
+        audio: false,
+      });
+    } catch (e3) {
+      console.warn("Camera strategy 3 failed, trying generic video constraint:", e3);
+    }
+
+    // Strategy 4: Plain video: true (compatible with all devices & drivers)
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+    } catch (e4) {
+      console.warn("Camera strategy 4 failed, trying device enumeration:", e4);
+    }
+
+    // Strategy 5: Query device list and pick first videoinput
+    if (navigator.mediaDevices.enumerateDevices) {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter((d) => d.kind === "videoinput");
+      if (videoDevices.length > 0) {
+        return await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: videoDevices[0].deviceId } },
+          audio: false,
+        });
+      }
+    }
+
+    throw new Error("No working camera found");
+  }, []);
+
   // Start Camera
   const startCameraStream = useCallback(async () => {
     stopCameraStream();
     setCameraError(null);
+    setIsLoadingCamera(true);
     setScannedSuccess(false);
     scannedRef.current = false;
+
+    // Check secure context (HTTPS / localhost required by browsers)
+    if (
+      typeof window !== "undefined" &&
+      !window.isSecureContext &&
+      window.location.hostname !== "localhost" &&
+      window.location.hostname !== "127.0.0.1"
+    ) {
+      setHasCamera(false);
+      setIsLoadingCamera(false);
+      setCameraError("Camera access requires HTTPS or localhost. If opening from mobile, connect via HTTPS or upload a QR image below.");
+      return;
+    }
 
     if (
       typeof navigator === "undefined" ||
@@ -233,21 +362,13 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       !navigator.mediaDevices.getUserMedia
     ) {
       setHasCamera(false);
-      setCameraError("Camera is not supported on this browser/device.");
+      setIsLoadingCamera(false);
+      setCameraError("Camera is not supported on this browser or device.");
       return;
     }
 
     try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
-        },
-        audio: false,
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const stream = await acquireCameraStream(facingMode);
       streamRef.current = stream;
       setHasCamera(true);
 
@@ -267,34 +388,27 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         } catch (e) {}
       }
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute("autoplay", "true");
-        videoRef.current.setAttribute("playsinline", "true");
-        videoRef.current.setAttribute("muted", "true");
-
-        const startScanning = () => {
-          isScanningRef.current = true;
-          if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-          animFrameRef.current = requestAnimationFrame(scanLoop);
-        };
-
-        videoRef.current.play().then(startScanning).catch(() => {
-          videoRef.current?.addEventListener("playing", startScanning, { once: true });
-        });
-      }
+      attachStreamToVideo(stream);
     } catch (err: any) {
       console.error("Camera access error:", err);
       setHasCamera(false);
+      setIsLoadingCamera(false);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        setCameraError("Camera permission was denied. Please allow camera access in your browser settings.");
+        setCameraError("Camera permission was denied. Please allow camera access in your browser address bar.");
       } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
         setCameraError("No camera device was detected on your system.");
       } else {
-        setCameraError("Unable to access the camera. Please check permissions or upload a QR image.");
+        setCameraError("Unable to open camera. Please check permissions or upload a QR image below.");
       }
     }
-  }, [facingMode, scanLoop, stopCameraStream]);
+  }, [facingMode, acquireCameraStream, attachStreamToVideo, stopCameraStream]);
+
+  // Keep video element synced with stream whenever mounted
+  useEffect(() => {
+    if (isOpen && streamRef.current && videoRef.current && !videoRef.current.srcObject) {
+      attachStreamToVideo(streamRef.current);
+    }
+  }, [isOpen, attachStreamToVideo]);
 
   // Toggle torch / flash
   const toggleTorch = async () => {
@@ -390,7 +504,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         {/* Top Header Bar */}
         <div className="w-full flex items-center justify-between px-5 py-3.5 bg-surface/80 dark:bg-surface/50 border-b border-surface-hover backdrop-blur-sm z-20">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500/15 text-brand-500 dark:text-brand-400 border border-brand-500/25">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500/15 text-brand-500 border border-brand-500/25">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 7V5a2 2 0 0 1 2-2h2" />
                 <path d="M17 3h2a2 2 0 0 1 2 2v2" />
@@ -410,7 +524,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
               <button
                 type="button"
                 onClick={toggleTorch}
-                className={`p-2 rounded-xl border transition-all ${
+                className={`p-2 rounded-full border transition-all ${
                   isTorchOn
                     ? "bg-amber-400 text-slate-950 border-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.6)]"
                     : "bg-surface hover:bg-surface-hover border-surface-hover text-ink-300 hover:text-ink-50"
@@ -429,7 +543,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
               <button
                 type="button"
                 onClick={flipCamera}
-                className="p-2 rounded-xl bg-surface hover:bg-surface-hover border border-surface-hover text-ink-300 hover:text-ink-50 transition-colors"
+                className="p-2 rounded-full bg-surface hover:bg-surface-hover border border-surface-hover text-ink-300 hover:text-ink-50 transition-colors"
                 title="Switch Camera (Front/Back)"
                 aria-label="Flip Camera"
               >
@@ -446,7 +560,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
                 stopCameraStream();
                 onClose();
               }}
-              className="p-2 rounded-xl bg-surface hover:bg-surface-hover border border-surface-hover text-ink-300 hover:text-ink-50 transition-colors ml-1"
+              className="p-2 rounded-full bg-surface hover:bg-surface-hover border border-surface-hover text-ink-300 hover:text-ink-50 transition-colors ml-1"
               aria-label="Close scanner"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -471,6 +585,14 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
           {/* Hidden Canvas for QR parsing */}
           <canvas ref={canvasRef} className="hidden" />
 
+          {/* Loading indicator when camera is spinning up */}
+          {isLoadingCamera && !cameraError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-black/85 z-10 animate-fade-in">
+              <div className="h-8 w-8 rounded-full border-2 border-brand-500 border-t-transparent animate-spin" />
+              <p className="text-xs font-medium text-ink-300">Opening camera...</p>
+            </div>
+          )}
+
           {/* Scanner Focus Frame & Cutout */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
             {/* Viewfinder Target Box */}
@@ -483,31 +605,31 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
               {/* Corner 1: Top-Left */}
               <div
                 className={`absolute -top-1 -left-1 w-7 h-7 border-t-4 border-l-4 rounded-tl-2xl transition-colors duration-300 ${
-                  scannedSuccess ? "border-emerald-400" : "border-brand-500 dark:border-brand-400"
+                  scannedSuccess ? "border-emerald-400" : "border-brand-500"
                 }`}
               />
               {/* Corner 2: Top-Right */}
               <div
                 className={`absolute -top-1 -right-1 w-7 h-7 border-t-4 border-r-4 rounded-tr-2xl transition-colors duration-300 ${
-                  scannedSuccess ? "border-emerald-400" : "border-brand-500 dark:border-brand-400"
+                  scannedSuccess ? "border-emerald-400" : "border-brand-500"
                 }`}
               />
               {/* Corner 3: Bottom-Left */}
               <div
                 className={`absolute -bottom-1 -left-1 w-7 h-7 border-b-4 border-l-4 rounded-bl-2xl transition-colors duration-300 ${
-                  scannedSuccess ? "border-emerald-400" : "border-brand-500 dark:border-brand-400"
+                  scannedSuccess ? "border-emerald-400" : "border-brand-500"
                 }`}
               />
               {/* Corner 4: Bottom-Right */}
               <div
                 className={`absolute -bottom-1 -right-1 w-7 h-7 border-b-4 border-r-4 rounded-br-2xl transition-colors duration-300 ${
-                  scannedSuccess ? "border-emerald-400" : "border-brand-500 dark:border-brand-400"
+                  scannedSuccess ? "border-emerald-400" : "border-brand-500"
                 }`}
               />
 
               {/* Animated Laser Scanning Beam */}
-              {!scannedSuccess && hasCamera && (
-                <div className="absolute left-2 right-2 h-1 bg-gradient-to-r from-transparent via-brand-500 dark:via-brand-400 to-transparent shadow-[0_0_15px_#818cf8] rounded-full animate-scan-laser pointer-events-none" />
+              {!scannedSuccess && hasCamera && !isLoadingCamera && (
+                <div className="absolute left-2 right-2 h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent shadow-[0_0_15px_#f1470c] rounded-full animate-scan-laser pointer-events-none" />
               )}
 
               {/* Success Verified Overlay */}
@@ -528,8 +650,8 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
           {/* Camera Error / Permission Fallback */}
           {cameraError && (
-            <div className="absolute inset-0 bg-panel/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center space-y-3 z-10">
-              <div className="h-12 w-12 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 dark:text-red-400 flex items-center justify-center">
+            <div className="absolute inset-0 bg-panel/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center space-y-3 z-20">
+              <div className="h-12 w-12 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 flex items-center justify-center">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
@@ -537,13 +659,13 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
                 </svg>
               </div>
               <div className="space-y-1">
-                <h4 className="text-sm font-bold modal-title">Camera Access</h4>
+                <h4 className="text-sm font-bold modal-title">Camera Notice</h4>
                 <p className="text-xs modal-sub max-w-xs">{cameraError}</p>
               </div>
               <button
                 type="button"
                 onClick={startCameraStream}
-                className="px-4 py-2 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-xl transition-all shadow-md cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-full transition-all shadow-md cursor-pointer"
               >
                 Retry Camera
               </button>
@@ -568,9 +690,9 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface hover:bg-surface-hover border border-surface-hover text-xs font-medium text-ink-200 hover:text-ink-50 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface hover:bg-surface-hover border border-surface-hover text-xs font-medium text-ink-200 hover:text-ink-50 transition-colors cursor-pointer"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-500 dark:text-brand-400">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-brand-500">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
