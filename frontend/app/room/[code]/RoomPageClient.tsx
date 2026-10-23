@@ -201,6 +201,12 @@ function RoomContent({ code }: RoomPageClientProps) {
               value={deviceName}
               maxLength={40}
               onChange={(e) => setDeviceName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !isConnecting && deviceName.trim() && !previewLoading) {
+                  e.preventDefault();
+                  joinRoom(code, deviceName.trim());
+                }
+              }}
               placeholder="e.g. Windows User 2, Android Device 2"
               className="w-full rounded-xl bg-surface border border-surface-hover px-3.5 py-2.5 text-xs text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
             />

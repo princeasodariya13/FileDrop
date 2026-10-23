@@ -207,6 +207,8 @@ export function useConnectRoom(initialCode?: string) {
   const [isHost, setIsHost] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isJoining, setIsJoining] = useState<boolean>(false);
+  const [isCreating, setIsCreating] = useState<boolean>(false);
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -619,6 +621,7 @@ export function useConnectRoom(initialCode?: string) {
 
   // Create room
   const createRoom = async (customName?: string, customRoomName?: string) => {
+    setIsCreating(true);
     setIsConnecting(true);
     setError(null);
     try {
@@ -695,6 +698,7 @@ export function useConnectRoom(initialCode?: string) {
       push(err.message || "Failed to create room.", "error");
       throw err;
     } finally {
+      setIsCreating(false);
       setIsConnecting(false);
     }
   };
@@ -708,6 +712,7 @@ export function useConnectRoom(initialCode?: string) {
       return;
     }
 
+    setIsJoining(true);
     setIsConnecting(true);
     setError(null);
     try {
@@ -784,6 +789,7 @@ export function useConnectRoom(initialCode?: string) {
       push(err.message || "Failed to join room.", "error");
       throw err;
     } finally {
+      setIsJoining(false);
       setIsConnecting(false);
     }
   };
@@ -1384,6 +1390,8 @@ export function useConnectRoom(initialCode?: string) {
     isHost,
     isConnected,
     isConnecting,
+    isJoining,
+    isCreating,
     isInitializing,
     isUploading,
     uploadProgress,

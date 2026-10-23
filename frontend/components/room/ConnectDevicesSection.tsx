@@ -17,6 +17,8 @@ export function ConnectDevicesSection() {
     isConnected,
     isHost,
     isConnecting,
+    isJoining,
+    isCreating,
     isInitializing,
     isUploading,
     uploadProgress,
@@ -40,6 +42,18 @@ export function ConnectDevicesSection() {
   const [roomName, setRoomName] = useState<string>("");
   const [deviceName, setDeviceName] = useState<string>(() => getDeviceDefaults().deviceName);
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+
+  const handleCreateRoom = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (isCreating) return;
+    createRoom(deviceName, roomName || "Live Room");
+  };
+
+  const handleJoinRoom = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (inputCode.trim().length !== 6 || isJoining) return;
+    joinRoom(inputCode.trim(), deviceName);
+  };
 
   if (isInitializing) {
     return <ConnectDevicesSkeleton />;
@@ -125,23 +139,29 @@ export function ConnectDevicesSection() {
               </p>
             </div>
 
-            <div className="space-y-2">
+            <form onSubmit={handleCreateRoom} className="space-y-2">
               <input
                 type="text"
                 maxLength={50}
                 value={roomName}
                 onChange={(e) => setRoomName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleCreateRoom();
+                  }
+                }}
                 placeholder="Room Name (e.g. Company Team, Friends)"
                 className="w-full rounded-xl bg-surface border border-surface-hover px-3.5 py-2 text-xs text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
               />
               <Button
+                type="submit"
                 className="w-full"
-                disabled={isConnecting}
-                onClick={() => createRoom(deviceName, roomName || "Live Room")}
+                disabled={isCreating}
               >
-                {isConnecting ? "Creating Room..." : "Create Room"}
+                {isCreating ? "Creating Room..." : "Create Room"}
               </Button>
-            </div>
+            </form>
           </div>
 
           {/* Card 2: Join Room */}
@@ -155,20 +175,26 @@ export function ConnectDevicesSection() {
               </p>
             </div>
 
-            <div className="space-y-2">
+            <form onSubmit={handleJoinRoom} className="space-y-2">
               <div className="flex items-center gap-2 w-full">
                 <input
                   type="text"
                   maxLength={6}
                   value={inputCode}
                   onChange={(e) => setInputCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleJoinRoom();
+                    }
+                  }}
                   placeholder="123456"
                   className="min-w-0 flex-1 text-center font-mono text-base font-bold tracking-widest rounded-xl bg-surface border border-surface-hover px-3 py-2.5 text-ink-50 focus:border-brand-500 focus:outline-hidden transition-colors"
                 />
                 <button
                   type="button"
                   onClick={() => setIsScannerOpen(true)}
-                  className="h-10 w-10 shrink-0 flex items-center justify-center rounded-xl bg-surface hover:bg-surface-hover border border-surface-hover text-brand-400 hover:text-brand-300 transition-colors"
+                  className="h-10 w-10 shrink-0 flex items-center justify-center rounded-xl bg-surface hover:bg-surface-hover border border-surface-hover text-brand-400 hover:text-brand-300 transition-colors cursor-pointer"
                   title="Scan QR Code"
                   aria-label="Scan QR Code"
                 >
@@ -182,14 +208,14 @@ export function ConnectDevicesSection() {
               </div>
 
               <Button
+                type="submit"
                 variant="secondary"
                 className="w-full"
-                disabled={inputCode.length !== 6 || isConnecting}
-                onClick={() => joinRoom(inputCode, deviceName)}
+                disabled={inputCode.length !== 6 || isJoining}
               >
-                {isConnecting ? "Joining..." : "Join Room"}
+                {isJoining ? "Joining..." : "Join Room"}
               </Button>
-            </div>
+            </form>
           </div>
         </div>
       </div>
