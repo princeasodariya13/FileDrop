@@ -145,6 +145,9 @@ export function UploadFlow() {
   async function handleStart() {
     if (selectedFiles.length === 0) return;
 
+    setBatchResult(null);
+    reset();
+
     // Generate ONE 6-digit transfer code for all files in this batch
     const batchCode = Math.floor(100000 + Math.random() * 900000).toString();
     const bundleId = `bundle_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -188,6 +191,7 @@ export function UploadFlow() {
           setBatchResult(completedResults[0]);
           addUpload(completedResults[0]);
         }
+        setSelectedFiles([]);
       }
     } catch (err: any) {
       push(err?.message || state.errorMessage || "Upload failed for one or more files.", "error");
@@ -259,37 +263,11 @@ export function UploadFlow() {
     }
   }
 
-  if (activeResult) {
-    return (
-      <div className="space-y-4">
-        <ShareResult result={activeResult} onUploadAnother={handleReset} onDelete={handleReset} />
-        <MyUploadsList onFileDeleted={(deletedId) => {
-          if (
-            (activeResult && activeResult.fileId === deletedId) ||
-            (activeResult?.files && activeResult.files.some((f) => f.fileId === deletedId))
-          ) {
-            handleReset();
-          }
-        }} />
-      </div>
-    );
-  }
-
-  if (isBusy && (selectedFiles.length > 0 || unfinishedUpload)) {
-    return (
-      <UploadProgressView
-        fileName={currentUploadingFileName || selectedFiles[0]?.name || unfinishedUpload?.fileName || "File"}
-        progress={state}
-        onCancel={cancel}
-      />
-    );
-  }
-
   const totalBatchSize = selectedFiles.reduce((acc, f) => acc + f.size, 0);
 
   return (
     <div className="space-y-6">
-      {/* Send / Receive / Connect Mode Switcher */}
+      {/* Send / Receive / Connect Mode Switcher - Always Visible */}
       <div className="flex items-center justify-center p-1.5 bg-surface border border-surface-hover rounded-2xl max-w-md mx-auto shadow-inner gap-1">
         <button
           type="button"
@@ -331,9 +309,25 @@ export function UploadFlow() {
       ) : activeTab === "receive" ? (
         <ReceiveFileSection />
       ) : (
+        <div className="space-y-6">
+          {/* Active Upload Result Banner - shown after upload completes */}
+          {activeResult && (
+            <div className="animate-fade-in-scale">
+              <ShareResult
+                result={activeResult}
+                onUploadAnother={handleReset}
+                onDelete={handleReset}
+              />
+            </div>
+          )}
 
-        <div className="space-y-4">
-          {unfinishedUpload ? (
+          {isBusy && (selectedFiles.length > 0 || unfinishedUpload) ? (
+            <UploadProgressView
+              fileName={currentUploadingFileName || selectedFiles[0]?.name || unfinishedUpload?.fileName || "File"}
+              progress={state}
+              onCancel={cancel}
+            />
+          ) : unfinishedUpload ? (
             <div className="rounded-card p-6 space-y-4 border border-brand-500/20 bg-brand-500/5 animate-fade-in-scale">
               <h3 className="text-lg font-semibold text-brand-400">Unfinished upload detected</h3>
               <p className="text-sm text-ink-300">
@@ -354,82 +348,85 @@ export function UploadFlow() {
               />
             </div>
           ) : (
-            <Dropzone onFilesSelected={handleFilesSelected} disabled={isBusy} />
-          )}
+            <>
+              {/* Send Files Dropzone - persistently visible so user can directly upload another file */}
+              <Dropzone onFilesSelected={handleFilesSelected} disabled={isBusy} />
 
-          {selectedFiles.length > 0 && !unfinishedUpload && (
-            <div className="rounded-card p-6 space-y-6 animate-fade-in-scale">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-brand-300 uppercase tracking-wider font-mono">
-                    {selectedFiles.length} {selectedFiles.length === 1 ? "File Selected" : "Files Selected"} ({formatBytes(totalBatchSize)})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => addFilesInputRef.current?.click()}
-                    className="text-xs text-brand-400 hover:text-brand-300 underline font-medium"
-                  >
-                    + Add more files
-                  </button>
-                  <input
-                    type="file"
-                    multiple
-                    ref={addFilesInputRef}
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files?.length) {
-                        handleFilesSelected(Array.from(e.target.files));
-                      }
-                      e.target.value = "";
-                    }}
-                  />
-                </div>
-
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {selectedFiles.map((file, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between bg-surface border border-surface-hover rounded-xl p-3"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/20 text-brand-400">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                            <path d="M13 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V9L13 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-medium text-ink-50">{file.name}</p>
-                          <p className="text-[10px] text-ink-400 font-mono mt-0.5">{formatBytes(file.size)}</p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveFile(index)}
-                        className="ml-2 text-xs py-1 px-2 hover:text-red-400 hover:bg-red-500/10"
+              {selectedFiles.length > 0 && (
+                <div className="rounded-card p-6 space-y-6 animate-fade-in-scale">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-brand-300 uppercase tracking-wider font-mono">
+                        {selectedFiles.length} {selectedFiles.length === 1 ? "File Selected" : "Files Selected"} ({formatBytes(totalBatchSize)})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => addFilesInputRef.current?.click()}
+                        className="text-xs text-brand-400 hover:text-brand-300 underline font-medium"
                       >
-                        Remove
-                      </Button>
+                        + Add more files
+                      </button>
+                      <input
+                        type="file"
+                        multiple
+                        ref={addFilesInputRef}
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files?.length) {
+                            handleFilesSelected(Array.from(e.target.files));
+                          }
+                          e.target.value = "";
+                        }}
+                      />
                     </div>
-                  ))}
+
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {selectedFiles.map((file, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between bg-surface border border-surface-hover rounded-xl p-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/20 text-brand-400">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                <path d="M13 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V9L13 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-medium text-ink-50">{file.name}</p>
+                              <p className="text-[10px] text-ink-400 font-mono mt-0.5">{formatBytes(file.size)}</p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveFile(index)}
+                            className="ml-2 text-xs py-1 px-2 hover:text-red-400 hover:bg-red-500/10"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <UploadOptionsForm value={options} onChange={setOptions} />
+
+                  {state.status === "failed" && (
+                    <p role="alert" className="text-sm text-red-600">
+                      {state.errorMessage}
+                    </p>
+                  )}
+
+                  <Button className="w-full" onClick={handleStart}>
+                    Upload {selectedFiles.length} {selectedFiles.length === 1 ? "File" : "Files"} &amp; get 1 Code
+                  </Button>
                 </div>
-              </div>
-
-              <UploadOptionsForm value={options} onChange={setOptions} />
-
-              {state.status === "failed" && (
-                <p role="alert" className="text-sm text-red-600">
-                  {state.errorMessage}
-                </p>
               )}
-
-              <Button className="w-full" onClick={handleStart}>
-                Upload {selectedFiles.length} {selectedFiles.length === 1 ? "File" : "Files"} &amp; get 1 Code
-              </Button>
-            </div>
+            </>
           )}
 
-          {state.status === "failed" && unfinishedUpload && (
+          {state.status === "failed" && !isBusy && selectedFiles.length === 0 && (
             <div className="rounded-card p-6">
               <p role="alert" className="text-sm text-red-600">
                 {state.errorMessage}
@@ -439,7 +436,16 @@ export function UploadFlow() {
         </div>
       )}
 
-      <MyUploadsList />
+      <MyUploadsList onFileDeleted={(deletedId) => {
+        if (
+          (activeResult && activeResult.fileId === deletedId) ||
+          (activeResult?.files && activeResult.files.some((f) => f.fileId === deletedId)) ||
+          (batchResult && batchResult.fileId === deletedId) ||
+          (batchResult?.files && batchResult.files.some((f) => f.fileId === deletedId))
+        ) {
+          handleReset();
+        }
+      }} />
     </div>
   );
 }
