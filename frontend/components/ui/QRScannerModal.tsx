@@ -27,6 +27,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
   const [hasCamera, setHasCamera] = useState<boolean | null>(null);
   const [isLoadingCamera, setIsLoadingCamera] = useState<boolean>(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [permissionState, setPermissionState] = useState<"granted" | "denied" | "prompt" | "unknown">("unknown");
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [hasTorch, setHasTorch] = useState<boolean>(false);
   const [isTorchOn, setIsTorchOn] = useState<boolean>(false);
@@ -45,6 +46,20 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       } catch (e) {
         barcodeDetectorRef.current = null;
       }
+    }
+  }, []);
+
+  // Check browser permission status
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && navigator.permissions && navigator.permissions.query) {
+      try {
+        navigator.permissions.query({ name: "camera" as any }).then((result) => {
+          setPermissionState(result.state);
+          result.onchange = () => {
+            setPermissionState(result.state);
+          };
+        }).catch(() => {});
+      } catch (e) {}
     }
   }, []);
 
@@ -270,7 +285,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     [scanLoop]
   );
 
-  // Progressive camera stream requester with multi-level fallbacks
+  // Progressive camera stream requester with early exit on permission denial
   const acquireCameraStream = useCallback(async (preferredFacing: "environment" | "user"): Promise<MediaStream> => {
     // Strategy 1: Ideal facingMode + resolution
     try {
@@ -282,7 +297,10 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         },
         audio: false,
       });
-    } catch (e1) {
+    } catch (e1: any) {
+      if (e1.name === "NotAllowedError" || e1.name === "PermissionDeniedError") {
+        throw e1;
+      }
       console.warn("Camera strategy 1 failed, trying strategy 2:", e1);
     }
 
@@ -294,7 +312,10 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         },
         audio: false,
       });
-    } catch (e2) {
+    } catch (e2: any) {
+      if (e2.name === "NotAllowedError" || e2.name === "PermissionDeniedError") {
+        throw e2;
+      }
       console.warn("Camera strategy 2 failed, trying opposite facingMode:", e2);
     }
 
@@ -306,7 +327,10 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         },
         audio: false,
       });
-    } catch (e3) {
+    } catch (e3: any) {
+      if (e3.name === "NotAllowedError" || e3.name === "PermissionDeniedError") {
+        throw e3;
+      }
       console.warn("Camera strategy 3 failed, trying generic video constraint:", e3);
     }
 
@@ -316,7 +340,10 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         video: true,
         audio: false,
       });
-    } catch (e4) {
+    } catch (e4: any) {
+      if (e4.name === "NotAllowedError" || e4.name === "PermissionDeniedError") {
+        throw e4;
+      }
       console.warn("Camera strategy 4 failed, trying device enumeration:", e4);
     }
 
@@ -371,6 +398,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       const stream = await acquireCameraStream(facingMode);
       streamRef.current = stream;
       setHasCamera(true);
+      setPermissionState("granted");
 
       const track = stream.getVideoTracks()[0];
       if (track) {
@@ -394,7 +422,8 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       setHasCamera(false);
       setIsLoadingCamera(false);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        setCameraError("Camera permission was denied. Please allow camera access in your browser address bar.");
+        setPermissionState("denied");
+        setCameraError("Camera permission was denied in your browser settings.");
       } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
         setCameraError("No camera device was detected on your system.");
       } else {
@@ -402,6 +431,44 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       }
     }
   }, [facingMode, acquireCameraStream, attachStreamToVideo, stopCameraStream]);
+
+  // Direct user-gesture handler to trigger native browser permission prompt
+  const handleRequestPermission = async () => {
+    setIsLoadingCamera(true);
+    setCameraError(null);
+
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+      setHasCamera(false);
+      setIsLoadingCamera(false);
+      setCameraError("Camera is not supported on this browser or device.");
+      return;
+    }
+
+    try {
+      // Direct call on direct user click event guarantees the browser pops up the permission dialog
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      streamRef.current = stream;
+      setHasCamera(true);
+      setPermissionState("granted");
+      attachStreamToVideo(stream);
+    } catch (err: any) {
+      console.error("Direct permission request error:", err);
+      setIsLoadingCamera(false);
+      setHasCamera(false);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setPermissionState("denied");
+        setCameraError("Camera permission is blocked in your browser.");
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        setCameraError("No camera device was found on this system.");
+      } else {
+        setCameraError("Unable to access camera. Please check permissions or upload a QR image below.");
+      }
+    }
+  };
 
   // Keep video element synced with stream whenever mounted
   useEffect(() => {
@@ -486,6 +553,8 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
   }, [isOpen, onClose]);
 
   if (!isOpen || !mounted || typeof document === "undefined") return null;
+
+  const isDenied = permissionState === "denied" || (cameraError && cameraError.toLowerCase().includes("denied"));
 
   return createPortal(
     <div
@@ -572,7 +641,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         </div>
 
         {/* Camera Live Viewfinder Area */}
-        <div className="relative w-full h-[320px] sm:h-[360px] bg-black flex items-center justify-center overflow-hidden">
+        <div className="relative w-full h-[340px] sm:h-[380px] bg-black flex items-center justify-center overflow-hidden">
           {/* Live Video Feed */}
           <video
             ref={videoRef}
@@ -648,27 +717,94 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
             </div>
           </div>
 
-          {/* Camera Error / Permission Fallback */}
+          {/* Camera Error / Permission Fallback View */}
           {cameraError && (
-            <div className="absolute inset-0 bg-panel/95 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center space-y-3 z-20">
-              <div className="h-12 w-12 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-500 flex items-center justify-center">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-              </div>
-              <div className="space-y-1">
-                <h4 className="text-sm font-bold modal-title">Camera Notice</h4>
-                <p className="text-xs modal-sub max-w-xs">{cameraError}</p>
-              </div>
-              <button
-                type="button"
-                onClick={startCameraStream}
-                className="px-4 py-2 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-full transition-all shadow-md cursor-pointer"
-              >
-                Retry Camera
-              </button>
+            <div className="absolute inset-0 bg-panel/95 backdrop-blur-sm flex flex-col items-center justify-center p-5 text-center space-y-3.5 z-20 overflow-y-auto">
+              {isDenied ? (
+                <>
+                  <div className="h-11 w-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center shrink-0">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  </div>
+
+                  <div className="space-y-1 max-w-xs">
+                    <h4 className="text-sm font-bold modal-title">Camera Permission Blocked</h4>
+                    <p className="text-xs modal-sub text-ink-300">
+                      Your browser has camera access blocked. Browsers do not allow websites to show permission dialogs once blocked.
+                    </p>
+                  </div>
+
+                  {/* 3-Step Guide to Enable in 2 seconds */}
+                  <div className="w-full max-w-xs rounded-2xl bg-surface/80 border border-surface-hover p-3 text-left space-y-2 text-[11px] text-ink-300">
+                    <p className="font-semibold text-ink-100 flex items-center gap-1.5">
+                      <span>How to enable in 2 seconds:</span>
+                    </p>
+                    <div className="space-y-1.5 pl-0.5">
+                      <p className="flex items-start gap-1.5">
+                        <span className="font-bold text-brand-500 font-mono">1.</span>
+                        <span>Click the <strong>🔒 lock</strong> or <strong>📷 camera</strong> icon in your browser address bar.</span>
+                      </p>
+                      <p className="flex items-start gap-1.5">
+                        <span className="font-bold text-brand-500 font-mono">2.</span>
+                        <span>Set <strong>Camera</strong> to <strong>Allow</strong>.</span>
+                      </p>
+                      <p className="flex items-start gap-1.5">
+                        <span className="font-bold text-brand-500 font-mono">3.</span>
+                        <span>Click <strong>Reload Page</strong> below to activate.</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2 w-full max-w-xs pt-1">
+                    <button
+                      type="button"
+                      onClick={() => window.location.reload()}
+                      className="w-full sm:flex-1 py-2 px-3 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-full transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 2v6h-6" />
+                        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                        <path d="M3 22v-6h6" />
+                        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                      </svg>
+                      <span>Reload Page</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRequestPermission}
+                      className="w-full sm:flex-1 py-2 px-3 text-xs font-semibold text-ink-200 bg-surface hover:bg-surface-hover border border-surface-hover rounded-full transition-all cursor-pointer"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="h-11 w-11 rounded-2xl bg-brand-500/15 border border-brand-500/30 text-brand-500 flex items-center justify-center shrink-0">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold modal-title">Camera Permission</h4>
+                    <p className="text-xs modal-sub max-w-xs">{cameraError}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRequestPermission}
+                    className="px-5 py-2.5 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 rounded-full transition-all shadow-md cursor-pointer flex items-center gap-2"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                    <span>Allow Camera Access</span>
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
