@@ -41,6 +41,14 @@ export const metadata: Metadata = {
     "FileDrop is a free online file sharing platform to send large files up to 10GB. Create secure file transfer links with temporary expiration and no signup required.",
   applicationName: "FileDrop",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/logo-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: "/logo-192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -98,6 +106,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${outfit.variable}`} suppressHydrationWarning>
       <head>
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/logo-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
