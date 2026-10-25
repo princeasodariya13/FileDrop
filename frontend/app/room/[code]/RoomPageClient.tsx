@@ -252,7 +252,7 @@ function RoomContent({ code }: RoomPageClientProps) {
 export function RoomPageClient({ code }: RoomPageClientProps) {
   return (
     <ToastProvider>
-      <div className="mx-auto max-w-2xl px-4 sm:px-6 py-12 lg:py-20 animate-fade-in-scale">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-28 sm:pt-36 pb-16 lg:pb-24 animate-fade-in-scale">
         <RoomContent code={code} />
       </div>
     </ToastProvider>

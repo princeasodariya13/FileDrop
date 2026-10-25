@@ -112,13 +112,13 @@ export function ConnectDevicesSection() {
           <h2 className="text-xl font-bold font-heading text-ink-50 tracking-tight">
             Connect Devices &amp; Live Share
           </h2>
-          <p className="text-xs sm:text-sm text-ink-400 max-w-md mx-auto">
+          <p className="text-xs sm:text-sm text-ink-400 max-w-lg mx-auto">
             Create or join a live multi-device room to share files instantly between phones, tablets, and computers.
           </p>
         </div>
 
         {/* Device Name Field */}
-        <div className="space-y-1.5 max-w-sm mx-auto">
+        <div className="space-y-1.5 max-w-md mx-auto">
           <label className="text-xs font-semibold text-ink-300">
             Your Device Name
           </label>
@@ -139,7 +139,7 @@ export function ConnectDevicesSection() {
         )}
 
         {/* Action Cards: Create vs Join */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
           {/* Card 1: Create Room */}
           <div className="flex flex-col justify-between p-5 rounded-2xl bg-surface/50 border border-surface-hover hover:border-brand-500/30 transition-all space-y-4">
             <div className="space-y-1.5">

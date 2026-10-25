@@ -293,7 +293,7 @@ export function UploadFlow() {
   return (
     <div className="space-y-6">
       {/* Send / Receive / Connect Mode Switcher - Always Visible */}
-      <div ref={modeSwitcherRef} className="flex items-center justify-center p-1.5 bg-surface/80 border border-surface-hover rounded-full max-w-md mx-auto shadow-xs backdrop-blur-md gap-1">
+      <div ref={modeSwitcherRef} className="flex items-center justify-center p-1.5 bg-surface/80 border border-surface-hover rounded-full max-w-lg mx-auto shadow-xs backdrop-blur-md gap-1">
         <button
           type="button"
           onClick={() => handleTabChange("send")}

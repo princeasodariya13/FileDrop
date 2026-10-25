@@ -71,7 +71,7 @@ const jsonLd = {
 
 export default function HomePage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 sm:px-6 pt-28 sm:pt-36 pb-16 lg:pb-24 animate-fade-in-scale">
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-28 sm:pt-36 pb-16 lg:pb-24 animate-fade-in-scale">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -84,7 +84,7 @@ export default function HomePage() {
         <h1 className="text-4xl sm:text-6xl font-bold font-heading text-ink-50 tracking-tight leading-[1.1]">
           Send huge files, <span className="text-brand-500">instantly.</span>
         </h1>
-        <p className="text-sm sm:text-base text-ink-400 max-w-xl mx-auto leading-relaxed">
+        <p className="text-sm sm:text-base text-ink-400 max-w-2xl mx-auto leading-relaxed">
           Upload and transfer large files online up to 10GB with FileDrop. Create temporary file sharing links with instant expiration and no registration required.
         </p>
       </div>
@@ -93,7 +93,7 @@ export default function HomePage() {
       </ToastProvider>
 
       {/* Supporting Crawlable SEO Section */}
-      <section className="mt-20 pt-10 border-t border-border-color grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+      <section className="mt-20 pt-10 border-t border-border-color grid grid-cols-1 sm:grid-cols-3 gap-5 text-center">
         <div className="p-5 space-y-2 rounded-3xl bg-surface/40 border border-surface-hover backdrop-blur-sm transition-all hover:border-brand-500/30 hover:bg-surface/60">
           <h2 className="text-sm font-bold text-ink-50 font-heading">Large File Transfer</h2>
           <p className="text-xs text-ink-400 leading-relaxed">

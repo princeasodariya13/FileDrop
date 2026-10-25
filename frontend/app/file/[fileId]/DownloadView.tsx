@@ -331,7 +331,7 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
 
 export function DownloadView({ file, error }: { file: FileInfoResponse | null; error: string | null }) {
   return (
-    <div className="mx-auto max-w-md px-4 sm:px-6 py-16">
+    <div className="mx-auto max-w-xl px-4 sm:px-6 pt-28 sm:pt-36 pb-16">
       <ToastProvider>
         {file ? (
           <DownloadCard file={file} />

@@ -404,7 +404,7 @@ export function ReceiveFileSection() {
         </div>
       ) : (
         /* FOUND FILE PREVIEW & DOWNLOAD CARD */
-        <div ref={foundFileRef} className="relative z-10 space-y-6 max-w-md mx-auto animate-fade-in-scale">
+        <div ref={foundFileRef} className="relative z-10 space-y-6 max-w-xl mx-auto animate-fade-in-scale">
           <div className={`bg-surface border ${isExpired ? "border-red-500/30" : "border-emerald-500/30"} rounded-2xl p-5 relative overflow-hidden space-y-4`}>
             <div className="flex items-center justify-between">
               <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${isExpired ? "bg-red-500/10 border border-red-500/30 text-red-400" : "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"}`}>
