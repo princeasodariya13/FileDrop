@@ -1,10 +1,8 @@
-const CACHE_NAME = 'filedrop-v2';
+const CACHE_NAME = 'filedrop-v1';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
-  '/logo.png',
-  '/logo-192.png',
-  '/logo-512.png'
+  '/logo.png'
 ];
 
 self.addEventListener('install', (event) => {
