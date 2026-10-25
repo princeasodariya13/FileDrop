@@ -124,8 +124,8 @@ export default function RootLayout({
         <header className="fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-5xl -translate-x-1/2 rounded-full border border-border-color bg-bg-panel/80 backdrop-blur-xl shadow-xs transition-colors">
           <div className="mx-auto flex h-14 w-full items-center justify-between px-3 sm:px-6">
             <Link href="/" className="flex items-center gap-2.5 focus-ring rounded-lg group">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl overflow-hidden shadow-md group-hover:scale-105 transition-transform bg-surface/50 border border-surface-hover/50">
-                <Image src="/logo.png" alt="FileDrop Logo" width={28} height={28} priority className="object-contain" />
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl overflow-hidden shadow-md group-hover:scale-105 transition-transform">
+                <Image src="/logo.png" alt="FileDrop Logo" width={36} height={36} priority className="object-cover scale-150" />
               </span>
               <span className="font-heading font-bold text-lg tracking-tight text-ink-50 group-hover:text-brand-500 transition-colors">FileDrop</span>
             </Link>
