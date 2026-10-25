@@ -1,0 +1,26 @@
+{
+  "name": "FileDrop — Fast & Free File Sharing",
+  "short_name": "FileDrop",
+  "description": "Send large files up to 10GB online for free with temporary links, QR codes, and multi-device connection.",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B0B0D",
+  "theme_color": "#F1470C",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
