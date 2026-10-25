@@ -8,13 +8,26 @@ export function ThemeToggle() {
 
   useEffect(() => {
     setMounted(true);
-    // 1. Check localStorage
     const saved = localStorage.getItem("filedrop-theme");
+    let isDark = false;
+
     if (saved === "dark") {
-      setTheme("dark");
+      isDark = true;
+    } else if (saved === "light") {
+      isDark = false;
     } else {
-      setTheme("light");
-      document.documentElement.classList.add("light");
+      // First time opening app: detect user's device/system theme
+      isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+
+    const currentTheme = isDark ? "dark" : "light";
+    setTheme(currentTheme);
+    document.documentElement.classList.toggle("light", !isDark);
+
+    // Update meta theme-color for mobile status bar
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute("content", isDark ? "#0B0B0D" : "#FAF9F6");
     }
   }, []);
 
@@ -23,6 +36,11 @@ export function ThemeToggle() {
     setTheme(newTheme);
     localStorage.setItem("filedrop-theme", newTheme);
     document.documentElement.classList.toggle("light", newTheme === "light");
+
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute("content", newTheme === "dark" ? "#0B0B0D" : "#FAF9F6");
+    }
   };
 
   // Prevent hydration mismatch by not rendering the icon until mounted

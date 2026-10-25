@@ -107,13 +107,19 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
-                let isLight = true;
-                const saved = localStorage.getItem("filedrop-theme");
+                var saved = localStorage.getItem("filedrop-theme");
+                var isDark = false;
                 if (saved === "dark") {
-                  isLight = false;
+                  isDark = true;
+                } else if (saved === "light") {
+                  isDark = false;
+                } else {
+                  isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
                 }
-                if (isLight) {
+                if (!isDark) {
                   document.documentElement.classList.add("light");
+                } else {
+                  document.documentElement.classList.remove("light");
                 }
               } catch (e) {}
             `,
