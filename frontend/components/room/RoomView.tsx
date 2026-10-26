@@ -99,9 +99,6 @@ export function RoomView({
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState<boolean>(false);
   const [isLeaving, setIsLeaving] = useState<boolean>(false);
 
-  // Responsive mobile file action menu
-  const [activeFileMenuId, setActiveFileMenuId] = useState<string | null>(null);
-
   // Prevent background scroll when any modal is open
   useEffect(() => {
     const isAnyModalOpen = Boolean(fileToDelete || deviceToRemove || isLeaveModalOpen || isQRModalOpen);
@@ -1126,7 +1123,7 @@ export function RoomView({
                             <div className="flex items-center gap-2 flex-wrap text-[11px] text-ink-400 font-mono">
                               <span>{formatBytes(file.sizeBytes)}</span>
                               {file.createdAt && (
-                                <span className="hidden xs:inline">• {formatTimestamp(file.createdAt)}</span>
+                                <span suppressHydrationWarning className="hidden xs:inline">• {formatTimestamp(file.createdAt)}</span>
                               )}
                               {/* Recipient status pill */}
                               {recipientInfo.isPrivate ? (
@@ -1249,7 +1246,7 @@ export function RoomView({
       {/* Edit Recipients Modal */}
       {mounted && typeof document !== "undefined" && fileToEditRecipients && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-md rounded-3xl modal-card p-6 shadow-2xl space-y-5 animate-scale-up z-[100000]">
+          <div className="relative w-full max-w-md rounded-3xl modal-card p-5 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 animate-scale-up z-[100000] max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between pb-1 border-b border-surface-hover">
               <div className="flex items-center gap-3">
@@ -1397,7 +1394,7 @@ export function RoomView({
       {/* Delete Confirmation Modal */}
       {mounted && typeof document !== "undefined" && fileToDelete && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up z-[100000]">
+          <div className="relative w-full max-w-sm rounded-3xl modal-card p-5 sm:p-6 shadow-2xl space-y-4 animate-scale-up z-[100000] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
                 <svg
@@ -1451,7 +1448,7 @@ export function RoomView({
       {/* Device Removal Confirmation Modal */}
       {mounted && typeof document !== "undefined" && deviceToRemove && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up z-[100000]">
+          <div className="relative w-full max-w-sm rounded-3xl modal-card p-5 sm:p-6 shadow-2xl space-y-4 animate-scale-up z-[100000] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
                 <svg
@@ -1508,7 +1505,7 @@ export function RoomView({
       {/* Leave Room Confirmation Modal */}
       {mounted && typeof document !== "undefined" && isLeaveModalOpen && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl modal-card p-6 shadow-2xl space-y-4 animate-scale-up z-[100000]">
+          <div className="relative w-full max-w-sm rounded-3xl modal-card p-5 sm:p-6 shadow-2xl space-y-4 animate-scale-up z-[100000] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500">
                 {isHost ? (
@@ -1596,7 +1593,7 @@ export function RoomView({
       {/* Edit Device Name Modal */}
       {isEditDeviceModalOpen && mounted && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-md rounded-3xl modal-card p-6 shadow-2xl space-y-5 animate-scale-up z-[100000]">
+          <div className="relative w-full max-w-md rounded-3xl modal-card p-5 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 animate-scale-up z-[100000] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-2 border-b border-surface-hover">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-500/10 border border-brand-500/20 text-brand-400">
