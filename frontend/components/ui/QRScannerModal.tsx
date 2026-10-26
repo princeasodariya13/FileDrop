@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { Html5Qrcode } from "html5-qrcode";
 import jsQR from "jsqr";
 import { useToast } from "@/components/ui/Toast";
 
@@ -16,25 +17,18 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
   const router = useRouter();
   const { push } = useToast();
 
-  // Video, canvas, stream and session references
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // References
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mobileCaptureRef = useRef<HTMLInputElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const animFrameRef = useRef<number | null>(null);
-  const isScanningRef = useRef<boolean>(false);
   const scannedRef = useRef<boolean>(false);
   const barcodeDetectorRef = useRef<any>(null);
-  const isDetectingRef = useRef<boolean>(false);
-  const lastScanTimestamp = useRef<number>(0);
-  const frameCountRef = useRef<number>(0);
-  const activeSessionRef = useRef<number>(0);
 
   // States
   const [hasCamera, setHasCamera] = useState<boolean>(true);
   const [isLoadingCamera, setIsLoadingCamera] = useState<boolean>(true);
   const [cameraBlocked, setCameraBlocked] = useState<boolean>(false);
+  const [isInsecureOrigin, setIsInsecureOrigin] = useState<boolean>(false);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [hasTorch, setHasTorch] = useState<boolean>(false);
   const [isTorchOn, setIsTorchOn] = useState<boolean>(false);
@@ -43,6 +37,15 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
   // Synchronous mount & BarcodeDetector setup
   useEffect(() => {
     setMounted(true);
+
+    if (
+      typeof window !== "undefined" &&
+      !window.isSecureContext &&
+      window.location.hostname !== "localhost" &&
+      window.location.hostname !== "127.0.0.1"
+    ) {
+      setIsInsecureOrigin(true);
+    }
 
     if (typeof window !== "undefined" && "BarcodeDetector" in window) {
       try {
@@ -75,35 +78,6 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
     } catch (e) {}
   }, []);
 
-  // Cleanly stop active tracks and animations WITHOUT changing activeSessionRef
-  const stopActiveTracks = useCallback(() => {
-    isScanningRef.current = false;
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => {
-        try {
-          track.stop();
-        } catch (e) {}
-      });
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setIsTorchOn(false);
-    setHasTorch(false);
-  }, []);
-
-  // Full camera teardown on close/unmount
-  const stopCameraStream = useCallback(() => {
-    activeSessionRef.current += 1;
-    stopActiveTracks();
-    setIsLoadingCamera(false);
-  }, [stopActiveTracks]);
-
   // Process decoded QR code data and route user instantly
   const handleDecodedData = useCallback(
     (rawData: string) => {
@@ -120,8 +94,18 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
       push("QR Code scanned successfully!", "success");
 
+      // Stop camera stream immediately
+      if (scannerRef.current) {
+        try {
+          if (scannerRef.current.isScanning) {
+            scannerRef.current.stop().catch(() => {});
+          }
+          scannerRef.current.clear();
+        } catch (e) {}
+        scannerRef.current = null;
+      }
+
       setTimeout(() => {
-        stopCameraStream();
         onClose();
 
         const trimmed = rawData.trim();
@@ -169,402 +153,287 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
         }
       }, 180);
     },
-    [playBeep, push, stopCameraStream, onClose, router]
+    [playBeep, push, onClose, router]
   );
 
-  // High-performance scanning loop with center-crop optimization
-  const scanLoop = useCallback(async () => {
-    if (!isScanningRef.current || scannedRef.current) return;
-
-    const video = videoRef.current;
-    if (!video || video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
-      if (isScanningRef.current && !scannedRef.current) {
-        animFrameRef.current = requestAnimationFrame(scanLoop);
-      }
-      return;
-    }
-
-    // Fast throttle to ~35-40 scans per second (25ms) for instant responsiveness
-    const now = performance.now();
-    if (now - lastScanTimestamp.current < 25) {
-      if (isScanningRef.current && !scannedRef.current) {
-        animFrameRef.current = requestAnimationFrame(scanLoop);
-      }
-      return;
-    }
-    lastScanTimestamp.current = now;
-    frameCountRef.current += 1;
-
-    // 1. Hardware-accelerated Native BarcodeDetector (1-3ms directly on video element)
-    if (barcodeDetectorRef.current && !isDetectingRef.current) {
-      isDetectingRef.current = true;
+  // Safe camera starter using Html5Qrcode
+  const startCamera = useCallback(
+    async (mode: "environment" | "user" = facingMode) => {
       try {
-        const barcodes = await barcodeDetectorRef.current.detect(video);
-        if (barcodes && barcodes.length > 0 && barcodes[0]?.rawValue) {
-          handleDecodedData(barcodes[0].rawValue);
-          isDetectingRef.current = false;
-          return;
-        }
-      } catch (e) {
-        // Continue scanning
-      } finally {
-        isDetectingRef.current = false;
-      }
-    }
+        setIsLoadingCamera(true);
+        setCameraBlocked(false);
+        setScannedSuccess(false);
+        scannedRef.current = false;
 
-    if (scannedRef.current) return;
+        const viewport = document.getElementById("qr-reader-viewport");
+        if (!viewport) return;
 
-    // 2. High-speed jsQR parsing with center-crop optimization
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const vWidth = video.videoWidth;
-      const vHeight = video.videoHeight;
-
-      if (vWidth > 0 && vHeight > 0) {
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        if (ctx) {
-          // On even frames: CROP THE CENTER SQUARE (Viewfinder Target Area)
-          // Maximum optical resolution for the QR code right in front of user
-          if (frameCountRef.current % 2 === 0) {
-            const minDim = Math.min(vWidth, vHeight);
-            const cropSize = Math.round(minDim * 0.72);
-            const cropX = Math.round((vWidth - cropSize) / 2);
-            const cropY = Math.round((vHeight - cropSize) / 2);
-            const targetDim = 380;
-
-            if (canvas.width !== targetDim || canvas.height !== targetDim) {
-              canvas.width = targetDim;
-              canvas.height = targetDim;
-            }
-
-            ctx.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, targetDim, targetDim);
-            const imgData = ctx.getImageData(0, 0, targetDim, targetDim);
-            const code = jsQR(imgData.data, targetDim, targetDim, {
-              inversionAttempts: "attemptBoth",
-            });
-
-            if (code && code.data) {
-              handleDecodedData(code.data);
-              return;
-            }
-          } else {
-            // On odd frames: check full frame (scaled to 420px width) in case QR is off-center
-            const scale = Math.min(1, 420 / Math.max(vWidth, vHeight));
-            const fullW = Math.round(vWidth * scale);
-            const fullH = Math.round(vHeight * scale);
-
-            if (canvas.width !== fullW || canvas.height !== fullH) {
-              canvas.width = fullW;
-              canvas.height = fullH;
-            }
-
-            ctx.drawImage(video, 0, 0, fullW, fullH);
-            const imgData = ctx.getImageData(0, 0, fullW, fullH);
-            const code = jsQR(imgData.data, fullW, fullH, {
-              inversionAttempts: "attemptBoth",
-            });
-
-            if (code && code.data) {
-              handleDecodedData(code.data);
-              return;
-            }
-          }
-        }
-      }
-    }
-
-    if (isScanningRef.current && !scannedRef.current) {
-      animFrameRef.current = requestAnimationFrame(scanLoop);
-    }
-  }, [handleDecodedData]);
-
-  // Robust cross-browser MediaStream acquisition
-  const getMediaStream = async (constraints: MediaStreamConstraints): Promise<MediaStream> => {
-    if (typeof navigator !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      return await navigator.mediaDevices.getUserMedia(constraints);
-    }
-    const legacy =
-      (navigator as any)?.getUserMedia ||
-      (navigator as any)?.webkitGetUserMedia ||
-      (navigator as any)?.mozGetUserMedia ||
-      (navigator as any)?.msGetUserMedia;
-    if (legacy) {
-      return new Promise((resolve, reject) => {
-        legacy.call(navigator, constraints, resolve, reject);
-      });
-    }
-    throw new Error("Camera API not available");
-  };
-
-  // Start Camera - opens camera immediately without instruction message overlays
-  const startCameraStream = useCallback(
-    async (targetMode: "environment" | "user" = facingMode) => {
-      const currentSession = ++activeSessionRef.current;
-      stopActiveTracks();
-
-      setIsLoadingCamera(true);
-      setCameraBlocked(false);
-      setScannedSuccess(false);
-      scannedRef.current = false;
-
-      let stream: MediaStream | null = null;
-
-      try {
-        // Attempt 1: Ideal facingMode without rigid resolution constraints
-        // This opens camera immediately on mobile without negotiation latency
-        try {
-          stream = await getMediaStream({
-            video: { facingMode: { ideal: targetMode } },
-            audio: false,
-          });
-        } catch (e1) {
-          // Attempt 2: Direct facingMode
+        // Clean up prior instance
+        if (scannerRef.current) {
           try {
-            stream = await getMediaStream({
-              video: { facingMode: targetMode },
-              audio: false,
-            });
-          } catch (e2) {
-            // Attempt 3: Universal fallback (works on all Windows webcams & phones)
-            try {
-              stream = await getMediaStream({
-                video: true,
-                audio: false,
-              });
-            } catch (e3) {
-              // Attempt 4: Pick first videoinput device if available
-              if (navigator.mediaDevices?.enumerateDevices) {
-                const devs = await navigator.mediaDevices.enumerateDevices();
-                const videoDev = devs.find((d) => d.kind === "videoinput");
-                if (videoDev) {
-                  stream = await getMediaStream({
-                    video: { deviceId: { exact: videoDev.deviceId } },
-                    audio: false,
-                  });
-                } else {
-                  throw e3;
-                }
-              } else {
-                throw e3;
-              }
+            if (scannerRef.current.isScanning) {
+              await scannerRef.current.stop();
             }
+            scannerRef.current.clear();
+          } catch (e) {}
+          scannerRef.current = null;
+        }
+
+        const html5QrCode = new Html5Qrcode("qr-reader-viewport");
+        scannerRef.current = html5QrCode;
+
+        const config = {
+          fps: 25,
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const qrboxSize = Math.floor(minEdge * 0.72);
+            return { width: qrboxSize, height: qrboxSize };
+          },
+          aspectRatio: 1.0,
+        };
+
+        const onSuccess = (decodedText: string) => {
+          handleDecodedData(decodedText);
+        };
+
+        const onError = () => {
+          // Normal frame scanning failure while searching
+        };
+
+        try {
+          // Fast path: start with preferred facing mode
+          await html5QrCode.start({ facingMode: mode }, config, onSuccess, onError);
+        } catch (e1) {
+          // Fallback: enumerate available cameras and choose matching camera
+          try {
+            const cameras = await Html5Qrcode.getCameras();
+            if (cameras && cameras.length > 0) {
+              const targetCam =
+                mode === "environment"
+                  ? cameras.find((c) => /back|rear|environment/i.test(c.label)) ||
+                    cameras[cameras.length - 1]
+                  : cameras.find((c) => /front|user|facing/i.test(c.label)) || cameras[0];
+              await html5QrCode.start(targetCam.id, config, onSuccess, onError);
+            } else {
+              throw e1;
+            }
+          } catch (e2) {
+            throw e2;
           }
         }
 
-        // Verify session was not cancelled
-        if (activeSessionRef.current !== currentSession) {
-          if (stream) {
-            stream.getTracks().forEach((t) => t.stop());
-          }
-          return;
-        }
-
-        streamRef.current = stream;
+        setIsLoadingCamera(false);
         setHasCamera(true);
         setCameraBlocked(false);
 
-        // Check torch capabilities
-        const track = stream.getVideoTracks()[0];
-        if (track) {
-          try {
-            const caps: any = track.getCapabilities ? track.getCapabilities() : {};
-            if (caps && caps.torch) {
-              setHasTorch(true);
-            }
-          } catch {}
-        }
-
-        // Attach stream to video element
-        const video = videoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          video.setAttribute("playsinline", "true");
-          video.setAttribute("webkit-playsinline", "true");
-          video.setAttribute("muted", "true");
-          video.muted = true;
-          video.defaultMuted = true;
-
-          let scanStarted = false;
-          const launchScan = () => {
-            if (scanStarted) return;
-            if (activeSessionRef.current !== currentSession) return;
-            scanStarted = true;
-            setIsLoadingCamera(false);
-            isScanningRef.current = true;
-            if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-            animFrameRef.current = requestAnimationFrame(scanLoop);
-          };
-
-          video.onloadedmetadata = launchScan;
-          video.oncanplay = launchScan;
-          video.onplaying = launchScan;
-
-          try {
-            const playPromise = video.play();
-            if (playPromise !== undefined) {
-              playPromise.then(launchScan).catch(() => {
-                launchScan();
-              });
-            }
-          } catch {
-            launchScan();
+        // Check if flashlight / torch is supported
+        try {
+          const caps = html5QrCode.getRunningTrackCameraCapabilities();
+          if (caps && caps.torchFeature().isSupported()) {
+            setHasTorch(true);
           }
-
-          if (video.readyState >= 1) {
-            launchScan();
-          }
-        }
+        } catch (e) {}
       } catch (err: any) {
-        if (activeSessionRef.current !== currentSession) return;
-        console.warn("Live camera stream unavailable:", err);
+        console.warn("Live stream camera unavailable:", err);
         setIsLoadingCamera(false);
         setCameraBlocked(true);
       }
     },
-    [facingMode, scanLoop, stopActiveTracks]
+    [facingMode, handleDecodedData]
   );
+
+  // Stop camera stream cleanly
+  const stopCamera = useCallback(async () => {
+    if (scannerRef.current) {
+      try {
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
+        scannerRef.current.clear();
+      } catch (e) {}
+      scannerRef.current = null;
+    }
+    setIsTorchOn(false);
+    setHasTorch(false);
+    setIsLoadingCamera(false);
+  }, []);
 
   // Toggle torch / flash
   const toggleTorch = async () => {
-    if (!streamRef.current) return;
-    const track = streamRef.current.getVideoTracks()[0];
-    if (track) {
-      try {
+    if (!scannerRef.current || !hasTorch) return;
+    try {
+      const caps = scannerRef.current.getRunningTrackCameraCapabilities();
+      if (caps && caps.torchFeature().isSupported()) {
         const next = !isTorchOn;
-        await (track as any).applyConstraints({
-          advanced: [{ torch: next }],
-        });
+        await caps.torchFeature().apply(next);
         setIsTorchOn(next);
-      } catch (e) {
-        console.error("Failed to toggle torch:", e);
       }
+    } catch (e) {
+      console.error("Failed to toggle torch:", e);
     }
   };
 
   // Flip camera between back & front
-  const flipCamera = () => {
+  const flipCamera = async () => {
     const nextMode = facingMode === "environment" ? "user" : "environment";
     setFacingMode(nextMode);
-    startCameraStream(nextMode);
+    await startCamera(nextMode);
   };
 
   // High-accuracy multi-scale decoder for mobile photos and gallery images
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsLoadingCamera(true);
-    const img = new Image();
-    const reader = new FileReader();
 
-    reader.onload = (event) => {
-      img.onload = async () => {
+    try {
+      // 1. Try html5QrCode built-in file scan
+      if (scannerRef.current) {
         try {
-          // 1. Hardware BarcodeDetector on raw image
-          if (typeof window !== "undefined" && "BarcodeDetector" in window) {
+          const decoded = await scannerRef.current.scanFile(file, false);
+          if (decoded) {
+            handleDecodedData(decoded);
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // 2. Hardware BarcodeDetector & multi-scale canvas scan
+      const img = new Image();
+      const reader = new FileReader();
+
+      await new Promise<void>((resolve, reject) => {
+        reader.onload = (event) => {
+          img.onload = async () => {
             try {
-              const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
-              const barcodes = await detector.detect(img);
-              if (barcodes && barcodes.length > 0 && barcodes[0]?.rawValue) {
-                handleDecodedData(barcodes[0].rawValue);
+              // BarcodeDetector
+              if (barcodeDetectorRef.current) {
+                try {
+                  const barcodes = await barcodeDetectorRef.current.detect(img);
+                  if (barcodes && barcodes.length > 0 && barcodes[0]?.rawValue) {
+                    handleDecodedData(barcodes[0].rawValue);
+                    resolve();
+                    return;
+                  }
+                } catch (e) {}
+              }
+
+              // Multi-scale canvas passes with jsQR
+              const canvas = document.createElement("canvas");
+              const ctx = canvas.getContext("2d", { willReadFrequently: true });
+              if (!ctx) {
+                reject();
                 return;
               }
-            } catch {}
-          }
 
-          // 2. jsQR Multi-Scale Passes
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          if (!ctx) return;
+              // Scale 1: 1000px max
+              const maxDim1 = 1000;
+              let w1 = img.width;
+              let h1 = img.height;
+              if (w1 > maxDim1 || h1 > maxDim1) {
+                if (w1 > h1) {
+                  h1 = Math.round((h1 * maxDim1) / w1);
+                  w1 = maxDim1;
+                } else {
+                  w1 = Math.round((w1 * maxDim1) / h1);
+                  h1 = maxDim1;
+                }
+              }
+              canvas.width = w1;
+              canvas.height = h1;
+              ctx.drawImage(img, 0, 0, w1, h1);
+              let imgData = ctx.getImageData(0, 0, w1, h1);
+              let code = jsQR(imgData.data, w1, h1, { inversionAttempts: "attemptBoth" });
 
-          // Scale 1: 1000px max dimension
-          const maxDim1 = 1000;
-          let w1 = img.width;
-          let h1 = img.height;
-          if (w1 > maxDim1 || h1 > maxDim1) {
-            if (w1 > h1) {
-              h1 = Math.round((h1 * maxDim1) / w1);
-              w1 = maxDim1;
-            } else {
-              w1 = Math.round((w1 * maxDim1) / h1);
-              h1 = maxDim1;
+              if (code && code.data) {
+                handleDecodedData(code.data);
+                resolve();
+                return;
+              }
+
+              // Scale 2: 650px high-contrast pass
+              const maxDim2 = 650;
+              let w2 = img.width;
+              let h2 = img.height;
+              if (w2 > maxDim2 || h2 > maxDim2) {
+                if (w2 > h2) {
+                  h2 = Math.round((h2 * maxDim2) / w2);
+                  w2 = maxDim2;
+                } else {
+                  w2 = Math.round((w2 * maxDim2) / h2);
+                  h2 = maxDim2;
+                }
+              }
+              canvas.width = w2;
+              canvas.height = h2;
+              ctx.drawImage(img, 0, 0, w2, h2);
+              imgData = ctx.getImageData(0, 0, w2, h2);
+              code = jsQR(imgData.data, w2, h2, { inversionAttempts: "attemptBoth" });
+
+              if (code && code.data) {
+                handleDecodedData(code.data);
+                resolve();
+                return;
+              }
+
+              // Scale 3: 75% center crop
+              const cropDim = Math.round(Math.min(w1, h1) * 0.75);
+              const cropX = Math.round((w1 - cropDim) / 2);
+              const cropY = Math.round((h1 - cropDim) / 2);
+              const cropCanvas = document.createElement("canvas");
+              cropCanvas.width = 550;
+              cropCanvas.height = 550;
+              const cropCtx = cropCanvas.getContext("2d", { willReadFrequently: true });
+              if (cropCtx) {
+                cropCtx.drawImage(canvas, cropX, cropY, cropDim, cropDim, 0, 0, 550, 550);
+                const cropData = cropCtx.getImageData(0, 0, 550, 550);
+                code = jsQR(cropData.data, 550, 550, { inversionAttempts: "attemptBoth" });
+                if (code && code.data) {
+                  handleDecodedData(code.data);
+                  resolve();
+                  return;
+                }
+              }
+
+              push("No QR code detected. Please ensure code is clear and well-lit.", "error");
+              resolve();
+            } catch (e) {
+              reject(e);
             }
-          }
-          canvas.width = w1;
-          canvas.height = h1;
-          ctx.drawImage(img, 0, 0, w1, h1);
-          let imgData = ctx.getImageData(0, 0, w1, h1);
-          let code = jsQR(imgData.data, w1, h1, { inversionAttempts: "attemptBoth" });
+          };
+          img.src = event.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+      });
+    } catch (e) {
+      push("Could not scan the image. Please try again.", "error");
+    } finally {
+      setIsLoadingCamera(false);
+    }
 
-          if (code && code.data) {
-            handleDecodedData(code.data);
-            return;
-          }
-
-          // Scale 2: 650px high-contrast pass
-          const maxDim2 = 650;
-          let w2 = img.width;
-          let h2 = img.height;
-          if (w2 > maxDim2 || h2 > maxDim2) {
-            if (w2 > h2) {
-              h2 = Math.round((h2 * maxDim2) / w2);
-              w2 = maxDim2;
-            } else {
-              w2 = Math.round((w2 * maxDim2) / h2);
-              h2 = maxDim2;
-            }
-          }
-          canvas.width = w2;
-          canvas.height = h2;
-          ctx.drawImage(img, 0, 0, w2, h2);
-          imgData = ctx.getImageData(0, 0, w2, h2);
-          code = jsQR(imgData.data, w2, h2, { inversionAttempts: "attemptBoth" });
-
-          if (code && code.data) {
-            handleDecodedData(code.data);
-            return;
-          }
-
-          // Scale 3: Center crop (75% of center at 550x550)
-          const cropDim = Math.round(Math.min(w1, h1) * 0.75);
-          const cropX = Math.round((w1 - cropDim) / 2);
-          const cropY = Math.round((h1 - cropDim) / 2);
-          const cropCanvas = document.createElement("canvas");
-          cropCanvas.width = 550;
-          cropCanvas.height = 550;
-          const cropCtx = cropCanvas.getContext("2d", { willReadFrequently: true });
-          if (cropCtx) {
-            cropCtx.drawImage(canvas, cropX, cropY, cropDim, cropDim, 0, 0, 550, 550);
-            const cropData = cropCtx.getImageData(0, 0, 550, 550);
-            code = jsQR(cropData.data, 550, 550, { inversionAttempts: "attemptBoth" });
-            if (code && code.data) {
-              handleDecodedData(code.data);
-              return;
-            }
-          }
-
-          push("No QR code detected. Please ensure code is clear and in focus.", "error");
-        } finally {
-          setIsLoadingCamera(false);
-        }
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
     e.target.value = "";
   };
 
-  // Mount/unmount camera lifecycle: triggers ONCE when modal opens
+  // Mount/unmount camera lifecycle
   useEffect(() => {
-    if (isOpen) {
-      startCameraStream();
-    } else {
-      stopCameraStream();
-    }
+    let active = true;
 
-    return () => {
-      stopCameraStream();
-    };
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        if (active) {
+          startCamera();
+        }
+      }, 70);
+
+      return () => {
+        active = false;
+        clearTimeout(timer);
+        stopCamera();
+      };
+    } else {
+      stopCamera();
+    }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle Escape key
@@ -585,7 +454,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
       className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/60 dark:bg-black/75 backdrop-blur-md animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
-          stopCameraStream();
+          stopCamera();
           onClose();
         }
       }}
@@ -669,7 +538,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
             <button
               type="button"
               onClick={() => {
-                stopCameraStream();
+                stopCamera();
                 onClose();
               }}
               className="p-2 rounded-full bg-surface hover:bg-surface-hover border border-surface-hover text-ink-300 hover:text-ink-50 transition-colors ml-1"
@@ -685,17 +554,8 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
         {/* Camera Live Viewfinder Area */}
         <div className="relative w-full h-[340px] sm:h-[380px] bg-black flex items-center justify-center overflow-hidden">
-          {/* Live Video Feed */}
-          <video
-            ref={videoRef}
-            className="w-full h-full object-cover"
-            playsInline
-            muted
-            autoPlay
-          />
-
-          {/* Hidden Canvas for QR parsing */}
-          <canvas ref={canvasRef} className="hidden" />
+          {/* Live Video Feed Container injected by Html5Qrcode */}
+          <div id="qr-reader-viewport" className="w-full h-full" />
 
           {/* Loading indicator when camera is spinning up */}
           {isLoadingCamera && !cameraBlocked && (
@@ -706,12 +566,12 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
           )}
 
           {/* Scanner Focus Frame & Cutout */}
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
             {/* Viewfinder Target Box */}
             <div
               className="relative w-56 h-56 sm:w-64 sm:h-64 rounded-3xl"
               style={{
-                boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.52)",
+                boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.48)",
               }}
             >
               {/* Corner 1: Top-Left */}
@@ -760,7 +620,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
             </div>
           </div>
 
-          {/* Seamless Fallback if camera stream is blocked by device permissions or LAN context */}
+          {/* Fallback if camera stream is blocked by device permissions or local LAN HTTP */}
           {cameraBlocked && (
             <div className="absolute inset-0 bg-surface/90 dark:bg-panel/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 z-20 animate-fade-in">
               <div className="h-14 w-14 rounded-2xl bg-brand-500/15 border border-brand-500/30 text-brand-500 flex items-center justify-center shrink-0">
@@ -773,7 +633,9 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
               <div className="space-y-1 max-w-xs">
                 <h4 className="text-sm font-bold modal-title font-heading">Camera Access</h4>
                 <p className="text-xs modal-sub text-ink-300">
-                  Tap below to scan directly with your device camera
+                  {isInsecureOrigin
+                    ? "Live camera stream requires HTTPS or localhost. Tap below to scan with your camera!"
+                    : "Live camera stream permission is required. Tap below to scan with your camera!"}
                 </p>
               </div>
 
@@ -792,7 +654,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
 
                 <button
                   type="button"
-                  onClick={() => startCameraStream()}
+                  onClick={() => startCamera()}
                   className="w-full py-2 px-4 text-xs font-medium text-ink-300 hover:text-ink-50 bg-transparent rounded-full transition-all cursor-pointer"
                 >
                   Retry Live Stream
@@ -802,7 +664,7 @@ export function QRScannerModal({ isOpen, onClose }: QRScannerModalProps) {
           )}
         </div>
 
-        {/* Bottom Bar: Instant Actions */}
+        {/* Bottom Bar: Actions */}
         <div className="w-full px-5 py-3.5 bg-surface/80 dark:bg-surface/50 border-t border-surface-hover flex flex-col items-center gap-2.5">
           <p className="text-xs modal-sub text-center font-medium">
             Align code inside frame or scan with camera photo
