@@ -25,8 +25,9 @@ const sizeClasses: Record<string, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", ...props }, ref) => (
+  ({ className, variant = "primary", size = "md", type = "button", ...props }, ref) => (
     <button
+      type={type}
       ref={ref}
       className={clsx(
         "focus-ring inline-flex items-center justify-center gap-2 rounded-full font-medium transition-all duration-200 disabled:cursor-not-allowed select-none",

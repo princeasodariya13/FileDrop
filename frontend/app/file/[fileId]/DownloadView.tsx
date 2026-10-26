@@ -163,32 +163,32 @@ function DownloadCard({ file }: { file: FileInfoResponse }) {
         {inlineToast && (
           <div
             role="alert"
-            className={`relative z-10 p-3.5 mb-5 rounded-xl border flex items-center gap-2.5 text-xs sm:text-sm font-medium animate-fade-in-scale ${
+            className={`relative z-10 p-3.5 mb-5 rounded-xl flex items-center gap-2.5 text-xs sm:text-sm font-semibold animate-fade-in-scale ${
               inlineToast.tone === "success"
-                ? "bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-800 dark:text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.15)]"
+                ? "toast-card-success"
                 : inlineToast.tone === "error"
-                ? "bg-red-500/10 dark:bg-red-500/15 border-red-500/30 text-red-800 dark:text-red-200 shadow-[0_0_20px_rgba(239,68,68,0.15)]"
-                : "bg-brand-500/10 dark:bg-brand-500/15 border-brand-500/30 text-brand-800 dark:text-brand-200"
+                ? "toast-card-error"
+                : "toast-card-info"
             }`}
           >
             {inlineToast.tone === "success" ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-emerald-400">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 toast-icon-success">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             ) : inlineToast.tone === "error" ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-red-400">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 toast-icon-error">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
             ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brand-400">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 toast-icon-info">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="8" x2="12.01" y2="8" />
               </svg>
             )}
-            <span className="flex-1">{inlineToast.message}</span>
+            <span className="flex-1 font-semibold leading-snug">{inlineToast.message}</span>
             <button
               type="button"
               onClick={() => setInlineToast(null)}

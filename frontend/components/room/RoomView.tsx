@@ -355,8 +355,11 @@ export function RoomView({
   const handleDownload = async (fileId: string, fileName: string) => {
     try {
       setDownloadingFileId(fileId);
-      await onDownloadFile(fileId, fileName);
+      await onDownloadFile(fileId, fileName, true);
       markFileAsDownloaded(fileId);
+      push(`"${fileName}" download started successfully!`, "success");
+    } catch (err: any) {
+      push(err?.message || "Failed to download file.", "error");
     } finally {
       setDownloadingFileId(null);
     }
@@ -1139,7 +1142,7 @@ export function RoomView({
               </span>
             </h3>
             {downloadedCount > 0 && (
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-mono">
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 font-mono">
                 {downloadedCount} of {downloadableFiles.length} downloaded
               </span>
             )}
@@ -1151,10 +1154,15 @@ export function RoomView({
           {/* Download All Button (Top Section) */}
           {downloadableFiles.length > 0 && (
             <Button
+              type="button"
               variant="primary"
               size="sm"
               disabled={isDownloadingAll || isUploading}
-              onClick={handleDownloadAll}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDownloadAll();
+              }}
               className="text-xs py-2 px-3.5 rounded-xl font-semibold w-full sm:w-auto justify-center shadow-xs cursor-pointer"
             >
               {isDownloadingAll ? (
@@ -1218,7 +1226,7 @@ export function RoomView({
                     <span className="text-xs font-bold text-ink-100 flex items-center gap-1.5">
                       {group.deviceName}
                       {group.isCurrentDevice && (
-                        <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-brand-500/20 text-brand-700 dark:text-brand-300 border border-brand-500/30">
                           You
                         </span>
                       )}
@@ -1250,7 +1258,7 @@ export function RoomView({
                       >
                         <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
                           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl mt-0.5 sm:mt-0 transition-colors ${
-                            isDownloaded ? "bg-emerald-500/20 text-emerald-400" : "bg-brand-500/20 text-brand-400"
+                            isDownloaded ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-brand-500/20 text-brand-600 dark:text-brand-400"
                           }`}>
                             <svg
                               width="20"
@@ -1274,7 +1282,7 @@ export function RoomView({
                                 {file.fileName}
                               </p>
                               {isRecentlyUploaded && (
-                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 shrink-0">
                                   Recently Added
                                 </span>
                               )}
@@ -1287,7 +1295,7 @@ export function RoomView({
                               {file.createdAt && (
                                 <span
                                   suppressHydrationWarning
-                                  className="inline-flex items-center gap-1 text-ink-300 font-sans"
+                                  className="inline-flex items-center gap-1 text-ink-400 dark:text-ink-300 font-sans"
                                   title={`Uploaded at ${formatTimestamp(file.createdAt)}`}
                                 >
                                   <svg
@@ -1305,7 +1313,7 @@ export function RoomView({
                                     <polyline points="12 6 12 12 16 14" />
                                   </svg>
                                   <span>{formatTimestamp(file.createdAt)}</span>
-                                  <span className="text-ink-500">({formatTimeAgo(file.createdAt, currentTime)})</span>
+                                  <span className="text-ink-500 font-medium">({formatTimeAgo(file.createdAt, currentTime)})</span>
                                 </span>
                               )}
 
@@ -1315,8 +1323,8 @@ export function RoomView({
                                   suppressHydrationWarning
                                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-sans font-medium ${
                                     formatRelativeExpiry(file.expiresAt, currentTime) === "expired"
-                                      ? "bg-red-500/15 text-red-400 border border-red-500/30"
-                                      : "bg-brand-500/10 text-brand-500 dark:text-brand-400 border border-brand-500/20"
+                                      ? "bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/30"
+                                      : "bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20"
                                   }`}
                                   title={`Expires: ${new Date(file.expiresAt).toLocaleTimeString()}`}
                                 >
@@ -1333,7 +1341,7 @@ export function RoomView({
                               )}
                               {/* Recipient status pill */}
                               {recipientInfo.isPrivate ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-sans font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-sans font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -1349,7 +1357,7 @@ export function RoomView({
 
                             {/* Downloaded successfully green confirmation text */}
                             {isDownloaded && (
-                              <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 pt-0.5 animate-fade-in">
+                              <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 pt-0.5 animate-fade-in">
                                 <svg
                                   width="12"
                                   height="12"
@@ -1372,13 +1380,18 @@ export function RoomView({
                         <div className="flex items-center justify-end sm:justify-start gap-2 pt-2 sm:pt-0 border-t border-surface/50 sm:border-0 shrink-0">
                           {/* Individual Download / Download Again Button */}
                           <Button
+                            type="button"
                             size="sm"
                             variant="secondary"
                             disabled={isDownloading || isDownloadingAll || isFileExpired}
-                            onClick={() => handleDownload(file.fileId, file.fileName)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleDownload(file.fileId, file.fileName);
+                            }}
                             className={`text-xs py-1.5 px-3 rounded-xl flex-1 sm:flex-initial justify-center cursor-pointer transition-all ${
                               isDownloaded
-                                ? "border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500 font-medium"
+                                ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500 font-semibold"
                                 : ""
                             }`}
                           >

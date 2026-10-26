@@ -23,6 +23,7 @@ export function ThemeToggle() {
     const currentTheme = isDark ? "dark" : "light";
     setTheme(currentTheme);
     document.documentElement.classList.toggle("light", !isDark);
+    document.documentElement.classList.toggle("dark", isDark);
 
     // Update meta theme-color for mobile status bar
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
@@ -36,6 +37,7 @@ export function ThemeToggle() {
     setTheme(newTheme);
     localStorage.setItem("filedrop-theme", newTheme);
     document.documentElement.classList.toggle("light", newTheme === "light");
+    document.documentElement.classList.toggle("dark", newTheme === "dark");
 
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {

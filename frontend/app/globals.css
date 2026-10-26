@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   /* Dark Theme variables (default for FileDrop) */
   --ink-50: #fbfbfb;
@@ -7,6 +9,7 @@
   --ink-200: #e4e4e7;
   --ink-300: #d4d4d8;
   --ink-400: #a1a1aa;
+  --ink-500: #888891;
   --ink-600: #71717a;
   --ink-800: #27272a;
   --ink-900: #18181b;
@@ -37,6 +40,25 @@
   --border-dropdown: rgba(255, 255, 255, 0.1);
   --text-dropdown: #fbfbfb;
   --hover-dropdown: rgba(255, 255, 255, 0.06);
+
+  /* Toast Tokens (Dark Mode) */
+  --toast-bg-info: #141417;
+  --toast-border-info: rgba(255, 255, 255, 0.16);
+  --toast-text-info: #ffffff;
+  --toast-icon-info: #ff7649;
+  --toast-icon-bg-info: rgba(255, 118, 73, 0.15);
+
+  --toast-bg-success: #063121;
+  --toast-border-success: rgba(52, 211, 153, 0.45);
+  --toast-text-success: #ecfdf5;
+  --toast-icon-success: #34d399;
+  --toast-icon-bg-success: rgba(52, 211, 153, 0.2);
+
+  --toast-bg-error: #450a0a;
+  --toast-border-error: rgba(248, 113, 113, 0.45);
+  --toast-text-error: #fef2f2;
+  --toast-icon-error: #f87171;
+  --toast-icon-bg-error: rgba(248, 113, 113, 0.2);
 }
 
 :root.light {
@@ -46,6 +68,7 @@
   --ink-200: #27272a;
   --ink-300: #3f3f46;
   --ink-400: #71717a;
+  --ink-500: #52525b;
   --ink-600: #a1a1aa;
   --ink-800: #f4f4f5;
   --ink-900: #fafafa;
@@ -75,6 +98,25 @@
   --border-dropdown: rgba(0, 0, 0, 0.08);
   --text-dropdown: #09090b;
   --hover-dropdown: #f4f4f5;
+
+  /* Toast Tokens (Light Mode - Crisp, High-Contrast & Beautiful) */
+  --toast-bg-info: #ffffff;
+  --toast-border-info: #cbd5e1;
+  --toast-text-info: #09090b;
+  --toast-icon-info: #f1470c;
+  --toast-icon-bg-info: rgba(241, 71, 12, 0.1);
+
+  --toast-bg-success: #f0fdf4;
+  --toast-border-success: #86efac;
+  --toast-text-success: #14532d;
+  --toast-icon-success: #16a34a;
+  --toast-icon-bg-success: rgba(22, 163, 74, 0.12);
+
+  --toast-bg-error: #fef2f2;
+  --toast-border-error: #fca5a5;
+  --toast-text-error: #7f1d1d;
+  --toast-icon-error: #dc2626;
+  --toast-icon-bg-error: rgba(220, 38, 38, 0.12);
 }
 
 @theme {
@@ -100,6 +142,7 @@
   --color-ink-200: var(--ink-200);
   --color-ink-300: var(--ink-300);
   --color-ink-400: var(--ink-400);
+  --color-ink-500: var(--ink-500);
   --color-ink-600: var(--ink-600);
   --color-ink-800: var(--ink-800);
   --color-ink-900: var(--ink-900);
@@ -187,6 +230,52 @@ body {
   color: var(--text-dropdown);
   box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.35);
   border-radius: 20px;
+}
+
+/* Theme Adaptive Toast System */
+.toast-card-info {
+  background-color: var(--toast-bg-info) !important;
+  border: 1px solid var(--toast-border-info) !important;
+  color: var(--toast-text-info) !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.25);
+}
+
+.toast-card-success {
+  background-color: var(--toast-bg-success) !important;
+  border: 1px solid var(--toast-border-success) !important;
+  color: var(--toast-text-success) !important;
+  box-shadow: 0 10px 30px -5px rgba(16, 185, 129, 0.2);
+}
+
+.toast-card-error {
+  background-color: var(--toast-bg-error) !important;
+  border: 1px solid var(--toast-border-error) !important;
+  color: var(--toast-text-error) !important;
+  box-shadow: 0 10px 30px -5px rgba(239, 68, 68, 0.2);
+}
+
+.toast-icon-bg-info {
+  background-color: var(--toast-icon-bg-info);
+}
+
+.toast-icon-bg-success {
+  background-color: var(--toast-icon-bg-success);
+}
+
+.toast-icon-bg-error {
+  background-color: var(--toast-icon-bg-error);
+}
+
+.toast-icon-info {
+  color: var(--toast-icon-info) !important;
+}
+
+.toast-icon-success {
+  color: var(--toast-icon-success) !important;
+}
+
+.toast-icon-error {
+  color: var(--toast-icon-error) !important;
 }
 
 /* Focus ring utility */
