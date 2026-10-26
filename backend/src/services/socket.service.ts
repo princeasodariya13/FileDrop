@@ -78,6 +78,8 @@ export function initSocketServer(httpServer: HttpServer): Server {
     pingInterval: 25000,
   });
 
+  startRoomFileAutoCleaner();
+
   io.on("connection", (socket: Socket) => {
     logger.debug({ socketId: socket.id }, "Socket connected");
 
@@ -230,6 +232,7 @@ export async function broadcastFileShared(roomCode: string, file: IRoomFile): Pr
     uploadedByDeviceName: file.uploadedByDeviceName,
     recipientDeviceIds: file.recipientDeviceIds || [],
     createdAt: file.createdAt,
+    expiresAt: file.expiresAt || null,
   };
 
   // If specific recipients specified -> emit ONLY to uploader and authorized recipient sockets
@@ -272,6 +275,7 @@ export async function broadcastFileRecipientsUpdated(roomCode: string, file: IRo
     uploadedByDeviceName: file.uploadedByDeviceName,
     recipientDeviceIds: file.recipientDeviceIds || [],
     createdAt: file.createdAt,
+    expiresAt: file.expiresAt || null,
   };
 
   io.to(roomChannel).emit("file_recipients_updated", payload);
@@ -440,9 +444,85 @@ export function getSocketServer(): Server | null {
 }
 
 export function closeSocketServer(): void {
+  stopRoomFileAutoCleaner();
   if (io) {
     io.close();
     io = null;
     logger.info("Socket.IO server closed");
   }
 }
+
+let roomFileCleanupTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Automatically purges room files permanently 30 seconds after expiration
+ * and broadcasts real-time deletion events to all connected room participants.
+ */
+export function startRoomFileAutoCleaner(): void {
+  if (roomFileCleanupTimer) return;
+  roomFileCleanupTimer = setInterval(async () => {
+    try {
+      const now = new Date();
+      // Files expired for >= 30 seconds
+      const thirtySecondsAgo = new Date(now.getTime() - 30 * 1000);
+
+      const rooms = await RoomModel.find({
+        status: "active",
+        "files.expiresAt": { $lte: thirtySecondsAgo, $ne: null },
+      });
+
+      if (!rooms || rooms.length === 0) return;
+
+      const { storage } = await import("@/services/storage.service");
+      const { FileModel } = await import("@/models/File.model");
+
+      for (const room of rooms) {
+        const expiredFiles = room.files.filter(
+          (f) => f.expiresAt && new Date(f.expiresAt) <= thirtySecondsAgo
+        );
+        if (expiredFiles.length === 0) continue;
+
+        const expiredIds = new Set(expiredFiles.map((f) => f.fileId));
+        room.files = room.files.filter((f) => !expiredIds.has(f.fileId));
+        room.lastActivityAt = now;
+        await room.save().catch(() => {});
+
+        for (const ef of expiredFiles) {
+          logger.info(
+            { roomCode: room.roomCode, fileId: ef.fileId },
+            "Room file automatically and permanently deleted 30s after expiration"
+          );
+          broadcastFileDeleted(room.roomCode, ef.fileId);
+
+          try {
+            const fileDoc = await FileModel.findOne({ fileId: ef.fileId });
+            if (fileDoc) {
+              fileDoc.status = "deleted";
+              await fileDoc.save();
+              await storage.deleteObject(fileDoc.storageKey).catch(() => {});
+              if (fileDoc.reservationId) {
+                const { StorageReservationModel } = await import("@/models/StorageReservation.model");
+                await StorageReservationModel.updateOne(
+                  { _id: fileDoc.reservationId },
+                  { $set: { status: "released" } }
+                ).catch(() => {});
+              }
+            }
+          } catch (cleanErr) {
+            logger.warn({ cleanErr, fileId: ef.fileId }, "Error cleaning up expired room file storage");
+          }
+        }
+      }
+    } catch (err) {
+      // Non-blocking background worker
+    }
+  }, 4000);
+}
+
+export function stopRoomFileAutoCleaner(): void {
+  if (roomFileCleanupTimer) {
+    clearInterval(roomFileCleanupTimer);
+    roomFileCleanupTimer = null;
+  }
+}
+

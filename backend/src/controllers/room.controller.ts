@@ -52,11 +52,16 @@ async function syncRoomFiles(
   }
 
   const now = new Date();
+  // Retain files for 30 seconds after expiration so clients see the expired countdown before permanent deletion
+  const thirtySecondsAgo = new Date(now.getTime() - 30 * 1000);
   const fileIds = room.files.map((f) => f.fileId);
   const activeDbFiles = await FileModel.find({
     fileId: { $in: fileIds },
     status: { $in: ["active", "deleted"] },
-    expiresAt: { $gt: now },
+    $or: [
+      { expiresAt: null },
+      { expiresAt: { $gt: thirtySecondsAgo } },
+    ],
   }).select("fileId");
 
   const activeIdSet = new Set(activeDbFiles.map((f) => f.fileId));
@@ -651,6 +656,15 @@ export async function downloadRoomFile(req: Request, res: Response, next: NextFu
 
     if (!file) {
       throw new ApiError(404, "FILE_NOT_FOUND", "This file is no longer available or has expired.");
+    }
+
+    // Strictly forbid download if file timer has expired
+    const now = new Date();
+    if (
+      (targetRoomFile.expiresAt && new Date(targetRoomFile.expiresAt) <= now) ||
+      (file.expiresAt && new Date(file.expiresAt) <= now)
+    ) {
+      throw new ApiError(410, "FILE_EXPIRED", "This file has expired and can no longer be downloaded.");
     }
 
     // Generate presigned download URL

@@ -7,7 +7,7 @@ import { DeviceBadge } from "./DeviceBadge";
 import { ActiveRoomsSelector } from "./ActiveRoomsSelector";
 import { Button } from "@/components/ui/Button";
 import { QRCodeModal } from "@/components/ui/QRCodeModal";
-import { formatBytes, formatTimestamp, formatRelativeExpiry, formatTimeAgo, isRecentUpload } from "@/utils/format";
+import { formatBytes, formatTimestamp, formatRelativeExpiry, formatTimeAgo, isRecentUpload, getRoomFileExpiryInfo } from "@/utils/format";
 import { useToast } from "@/components/ui/Toast";
 import { scrollToElement } from "@/utils/scroll";
 
@@ -339,20 +339,36 @@ export function RoomView({
     }
   };
 
-  // All shared files in the room authorized for this device to download (excluding expired)
-  const downloadableFiles = useMemo(() => {
+  // Visible room files (strictly filtering out any files that reached the 30s post-expiry auto-delete threshold)
+  const visibleRoomFiles = useMemo(() => {
     return room.files.filter((file) => {
+      const expiry = getRoomFileExpiryInfo(file.expiresAt, currentTime);
+      return !expiry.isPermanentlyDeleted;
+    });
+  }, [room.files, currentTime]);
+
+  // All shared files in the room authorized for this device to download (strictly excluding expired files)
+  const downloadableFiles = useMemo(() => {
+    return visibleRoomFiles.filter((file) => {
       // Exclude expired files
-      if (file.expiresAt && new Date(file.expiresAt).getTime() <= currentTime) return false;
+      const expiry = getRoomFileExpiryInfo(file.expiresAt, currentTime);
+      if (expiry.isExpired) return false;
       // If file has specific recipient devices, only allow if current device is a recipient or uploader
       if (!file.recipientDeviceIds || file.recipientDeviceIds.length === 0) return true;
       if (file.uploadedByDeviceId === currentDeviceId) return true;
       if (currentDeviceId && file.recipientDeviceIds.includes(currentDeviceId)) return true;
       return false;
     });
-  }, [room.files, currentDeviceId, currentTime]);
+  }, [visibleRoomFiles, currentDeviceId, currentTime]);
 
   const handleDownload = async (fileId: string, fileName: string) => {
+    const targetFile = room.files.find((f) => f.fileId === fileId);
+    const expiry = getRoomFileExpiryInfo(targetFile?.expiresAt, currentTime);
+    if (expiry.isExpired) {
+      push(`"${fileName}" has expired and can no longer be downloaded.`, "error");
+      return;
+    }
+
     try {
       setDownloadingFileId(fileId);
       await onDownloadFile(fileId, fileName, true);
@@ -498,7 +514,7 @@ export function RoomView({
       }
     >();
 
-    for (const file of room.files) {
+    for (const file of visibleRoomFiles) {
       const devId = file.uploadedByDeviceId || "unknown";
       let group = groupsMap.get(devId);
       if (!group) {
@@ -539,7 +555,7 @@ export function RoomView({
       if (latestA !== latestB) return latestB - latestA;
       return b.files.length - a.files.length;
     });
-  }, [room.files, currentDeviceId]);
+  }, [visibleRoomFiles, currentDeviceId]);
 
   // Count how many downloadable files have been downloaded by receiver
   const downloadedCount = useMemo(() => {
@@ -1138,7 +1154,7 @@ export function RoomView({
             <h3 className="text-sm font-bold font-heading text-ink-50 flex items-center gap-2">
               <span>Shared Room Files</span>
               <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-surface-hover text-ink-300">
-                {room.files.length}
+                {visibleRoomFiles.length}
               </span>
             </h3>
             {downloadedCount > 0 && (
@@ -1195,7 +1211,7 @@ export function RoomView({
           )}
         </div>
 
-        {room.files.length === 0 ? (
+        {visibleRoomFiles.length === 0 ? (
           <div className="py-8 text-center space-y-2">
             <p className="text-sm text-ink-400 font-medium">No files shared yet.</p>
             <p className="text-xs text-ink-600 max-w-xs mx-auto">
@@ -1245,7 +1261,8 @@ export function RoomView({
                     const recipientInfo = formatRecipientDisplay(file);
                     const isDownloaded = downloadedFileIds.has(file.fileId);
                     const isRecentlyUploaded = isRecentUpload(file.createdAt, 5, currentTime);
-                    const isFileExpired = file.expiresAt ? new Date(file.expiresAt).getTime() <= currentTime : false;
+                    const expiryInfo = getRoomFileExpiryInfo(file.expiresAt, currentTime);
+                    const isFileExpired = expiryInfo.isExpired;
 
                     return (
                       <div
@@ -1321,22 +1338,22 @@ export function RoomView({
                               {file.expiresAt && (
                                 <span
                                   suppressHydrationWarning
-                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-sans font-medium ${
-                                    formatRelativeExpiry(file.expiresAt, currentTime) === "expired"
-                                      ? "bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/30"
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-sans font-medium transition-all ${
+                                    isFileExpired
+                                      ? "bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/30 animate-pulse"
                                       : "bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20"
                                   }`}
-                                  title={`Expires: ${new Date(file.expiresAt).toLocaleTimeString()}`}
+                                  title={
+                                    isFileExpired
+                                      ? `Expired — permanently deleting in ${expiryInfo.secondsUntilDelete}s`
+                                      : `Expires: ${new Date(file.expiresAt).toLocaleTimeString()}`
+                                  }
                                 >
                                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                     <circle cx="12" cy="12" r="10" />
                                     <polyline points="12 6 12 12 16 14" />
                                   </svg>
-                                  <span>
-                                    {formatRelativeExpiry(file.expiresAt, currentTime) === "expired"
-                                      ? "Expired"
-                                      : `Expires ${formatRelativeExpiry(file.expiresAt, currentTime)}`}
-                                  </span>
+                                  <span>{expiryInfo.badgeText}</span>
                                 </span>
                               )}
                               {/* Recipient status pill */}
@@ -1387,12 +1404,22 @@ export function RoomView({
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
+                              if (isFileExpired) return;
                               handleDownload(file.fileId, file.fileName);
                             }}
-                            className={`text-xs py-1.5 px-3 rounded-xl flex-1 sm:flex-initial justify-center cursor-pointer transition-all ${
-                              isDownloaded
-                                ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500 font-semibold"
-                                : ""
+                            title={
+                              isFileExpired
+                                ? "This file has expired and cannot be downloaded"
+                                : isDownloaded
+                                ? "Download again to this device"
+                                : "Download file to this device"
+                            }
+                            className={`text-xs py-1.5 px-3 rounded-xl flex-1 sm:flex-initial justify-center transition-all ${
+                              isFileExpired
+                                ? "!opacity-50 !cursor-not-allowed !pointer-events-none bg-surface/40 border-surface text-ink-500"
+                                : isDownloaded
+                                ? "cursor-pointer border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500 font-semibold"
+                                : "cursor-pointer"
                             }`}
                           >
                             {isDownloading ? (
@@ -1401,7 +1428,22 @@ export function RoomView({
                                 <span>Downloading...</span>
                               </span>
                             ) : isFileExpired ? (
-                              <span>Expired</span>
+                              <span className="flex items-center gap-1.5 text-ink-400">
+                                <svg
+                                  width="13"
+                                  height="13"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <circle cx="12" cy="12" r="10" />
+                                  <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                                </svg>
+                                <span>Expired</span>
+                              </span>
                             ) : isDownloaded ? (
                               <span className="flex items-center gap-1.5">
                                 <svg

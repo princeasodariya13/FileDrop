@@ -46,6 +46,68 @@ export function formatRelativeExpiry(iso: string, nowMs: number = Date.now()): s
   return `in ${days}d`;
 }
 
+export interface RoomFileExpiryInfo {
+  isExpired: boolean;
+  isPermanentlyDeleted: boolean;
+  secondsUntilDelete: number;
+  badgeText: string;
+}
+
+export function getRoomFileExpiryInfo(
+  expiresAt: string | Date | null | undefined,
+  nowMs: number = Date.now()
+): RoomFileExpiryInfo {
+  if (!expiresAt) {
+    return {
+      isExpired: false,
+      isPermanentlyDeleted: false,
+      secondsUntilDelete: 0,
+      badgeText: "",
+    };
+  }
+
+  const expiryTime = new Date(expiresAt).getTime();
+  if (isNaN(expiryTime)) {
+    return {
+      isExpired: false,
+      isPermanentlyDeleted: false,
+      secondsUntilDelete: 0,
+      badgeText: "",
+    };
+  }
+
+  const diffMs = expiryTime - nowMs;
+
+  // More than 30 seconds past expiration -> permanent deletion threshold
+  if (diffMs <= -30000) {
+    return {
+      isExpired: true,
+      isPermanentlyDeleted: true,
+      secondsUntilDelete: 0,
+      badgeText: "Deleted",
+    };
+  }
+
+  // 0 to 30 seconds past expiration -> Expired state with countdown to permanent deletion
+  if (diffMs <= 0) {
+    const secondsLeft = Math.max(0, Math.ceil((expiryTime + 30000 - nowMs) / 1000));
+    return {
+      isExpired: true,
+      isPermanentlyDeleted: false,
+      secondsUntilDelete: secondsLeft,
+      badgeText: `Expired • Deleting in ${secondsLeft}s`,
+    };
+  }
+
+  // Active unexpired timer
+  return {
+    isExpired: false,
+    isPermanentlyDeleted: false,
+    secondsUntilDelete: 0,
+    badgeText: `Expires ${formatRelativeExpiry(String(expiresAt), nowMs)}`,
+  };
+}
+
 export function formatTimestamp(dateValue: string | Date | undefined): string {
   if (!dateValue) return "";
   try {
