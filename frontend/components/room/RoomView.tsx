@@ -7,7 +7,7 @@ import { DeviceBadge } from "./DeviceBadge";
 import { ActiveRoomsSelector } from "./ActiveRoomsSelector";
 import { Button } from "@/components/ui/Button";
 import { QRCodeModal } from "@/components/ui/QRCodeModal";
-import { formatBytes, formatTimestamp, formatRelativeExpiry } from "@/utils/format";
+import { formatBytes, formatTimestamp, formatRelativeExpiry, formatTimeAgo, isRecentUpload } from "@/utils/format";
 import { useToast } from "@/components/ui/Toast";
 import { scrollToElement } from "@/utils/scroll";
 
@@ -109,6 +109,35 @@ export function RoomView({
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState<boolean>(false);
   const [downloadAllProgress, setDownloadAllProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Track files downloaded by this receiver device (persisted per room)
+  const [downloadedFileIds, setDownloadedFileIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = localStorage.getItem(`filedrop_downloaded_room_files_${room.roomCode}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return new Set(parsed);
+      }
+    } catch {}
+    return new Set();
+  });
+
+  const markFileAsDownloaded = (fileId: string) => {
+    setDownloadedFileIds((prev) => {
+      if (prev.has(fileId)) return prev;
+      const next = new Set(prev);
+      next.add(fileId);
+      try {
+        localStorage.setItem(
+          `filedrop_downloaded_room_files_${room.roomCode}`,
+          JSON.stringify(Array.from(next))
+        );
+      } catch {}
+      return next;
+    });
+  };
+
   const [fileToDelete, setFileToDelete] = useState<RoomFile | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
@@ -327,6 +356,7 @@ export function RoomView({
     try {
       setDownloadingFileId(fileId);
       await onDownloadFile(fileId, fileName);
+      markFileAsDownloaded(fileId);
     } finally {
       setDownloadingFileId(null);
     }
@@ -350,6 +380,7 @@ export function RoomView({
       setDownloadAllProgress({ current: i + 1, total: downloadableFiles.length });
       try {
         await onDownloadFile(file.fileId, file.fileName, true);
+        markFileAsDownloaded(file.fileId);
         successCount++;
       } catch (err: any) {
         console.error(`Failed to download ${file.fileName}:`, err);
@@ -480,15 +511,37 @@ export function RoomView({
       }
       group.files.push(file);
       group.totalSizeBytes += file.sizeBytes;
+      if (file.createdAt) {
+        if (!group.latestUploadTime || new Date(file.createdAt).getTime() > new Date(group.latestUploadTime).getTime()) {
+          group.latestUploadTime = String(file.createdAt);
+        }
+      }
     }
 
-    // Sort groups: current device first, then by latest upload
+    // Sort files within each device group: newest upload first
+    for (const group of groupsMap.values()) {
+      group.files.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+    }
+
+    // Sort groups: current device first, then by most recent upload
     return Array.from(groupsMap.values()).sort((a, b) => {
       if (a.isCurrentDevice) return -1;
       if (b.isCurrentDevice) return 1;
+      const latestA = a.latestUploadTime ? new Date(a.latestUploadTime).getTime() : 0;
+      const latestB = b.latestUploadTime ? new Date(b.latestUploadTime).getTime() : 0;
+      if (latestA !== latestB) return latestB - latestA;
       return b.files.length - a.files.length;
     });
   }, [room.files, currentDeviceId]);
+
+  // Count how many downloadable files have been downloaded by receiver
+  const downloadedCount = useMemo(() => {
+    return downloadableFiles.filter((f) => downloadedFileIds.has(f.fileId)).length;
+  }, [downloadableFiles, downloadedFileIds]);
 
   const totalPendingSize = useMemo(() => {
     return pendingFiles.reduce((acc, item) => acc + item.file.size, 0);
@@ -1078,13 +1131,18 @@ export function RoomView({
       {/* Shared Files Feed — Organized by Uploader */}
       <div ref={sharedFilesRef} className="rounded-3xl p-4 sm:p-6 md:p-8 border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-surface pb-3.5">
-          <div className="flex items-center justify-between sm:justify-start gap-2.5">
+          <div className="flex items-center justify-between sm:justify-start gap-2.5 flex-wrap">
             <h3 className="text-sm font-bold font-heading text-ink-50 flex items-center gap-2">
               <span>Shared Room Files</span>
               <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-surface-hover text-ink-300">
                 {room.files.length}
               </span>
             </h3>
+            {downloadedCount > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-mono">
+                {downloadedCount} of {downloadableFiles.length} downloaded
+              </span>
+            )}
             <span className="text-[11px] text-ink-400 font-mono hidden xs:inline-block">
               • Auto-syncs across devices
             </span>
@@ -1177,14 +1235,23 @@ export function RoomView({
                     const isDownloading = downloadingFileId === file.fileId;
                     const canDelete = file.uploadedByDeviceId === currentDeviceId;
                     const recipientInfo = formatRecipientDisplay(file);
+                    const isDownloaded = downloadedFileIds.has(file.fileId);
+                    const isRecentlyUploaded = isRecentUpload(file.createdAt, 5, currentTime);
+                    const isFileExpired = file.expiresAt ? new Date(file.expiresAt).getTime() <= currentTime : false;
 
                     return (
                       <div
                         key={file.fileId}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-surface/70 border border-surface-hover hover:border-brand-500/30 transition-all gap-3"
+                        className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-3.5 rounded-2xl border transition-all gap-3 ${
+                          isDownloaded
+                            ? "bg-surface/80 border-emerald-500/30 shadow-xs"
+                            : "bg-surface/70 border-surface-hover hover:border-brand-500/30"
+                        }`}
                       >
                         <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500/20 text-brand-400 mt-0.5 sm:mt-0">
+                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl mt-0.5 sm:mt-0 transition-colors ${
+                            isDownloaded ? "bg-emerald-500/20 text-emerald-400" : "bg-brand-500/20 text-brand-400"
+                          }`}>
                             <svg
                               width="20"
                               height="20"
@@ -1199,17 +1266,49 @@ export function RoomView({
                             </svg>
                           </div>
                           <div className="min-w-0 flex-1 space-y-1">
-                            <p
-                              className="truncate text-xs sm:text-sm font-semibold text-ink-50 leading-snug"
-                              title={file.fileName}
-                            >
-                              {file.fileName}
-                            </p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p
+                                className="truncate text-xs sm:text-sm font-semibold text-ink-50 leading-snug"
+                                title={file.fileName}
+                              >
+                                {file.fileName}
+                              </p>
+                              {isRecentlyUploaded && (
+                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                                  Recently Added
+                                </span>
+                              )}
+                            </div>
+
                             <div className="flex items-center gap-2 flex-wrap text-[11px] text-ink-400 font-mono">
                               <span>{formatBytes(file.sizeBytes)}</span>
+
+                              {/* Upload timestamp - Clear & visible across all mobile & desktop viewports */}
                               {file.createdAt && (
-                                <span suppressHydrationWarning className="hidden xs:inline">• {formatTimestamp(file.createdAt)}</span>
+                                <span
+                                  suppressHydrationWarning
+                                  className="inline-flex items-center gap-1 text-ink-300 font-sans"
+                                  title={`Uploaded at ${formatTimestamp(file.createdAt)}`}
+                                >
+                                  <svg
+                                    width="11"
+                                    height="11"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="text-ink-400 shrink-0"
+                                  >
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                  </svg>
+                                  <span>{formatTimestamp(file.createdAt)}</span>
+                                  <span className="text-ink-500">({formatTimeAgo(file.createdAt, currentTime)})</span>
+                                </span>
                               )}
+
                               {/* Timer / Expiration pill */}
                               {file.expiresAt && (
                                 <span
@@ -1247,23 +1346,66 @@ export function RoomView({
                                 </span>
                               )}
                             </div>
+
+                            {/* Downloaded successfully green confirmation text */}
+                            {isDownloaded && (
+                              <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 pt-0.5 animate-fade-in">
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                <span>Downloaded successfully</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
                         {/* File Action Controls */}
                         <div className="flex items-center justify-end sm:justify-start gap-2 pt-2 sm:pt-0 border-t border-surface/50 sm:border-0 shrink-0">
-                          {/* Individual Download Button */}
+                          {/* Individual Download / Download Again Button */}
                           <Button
                             size="sm"
                             variant="secondary"
-                            disabled={isDownloading || isDownloadingAll || (file.expiresAt ? new Date(file.expiresAt).getTime() <= currentTime : false)}
+                            disabled={isDownloading || isDownloadingAll || isFileExpired}
                             onClick={() => handleDownload(file.fileId, file.fileName)}
-                            className="text-xs py-1.5 px-3 rounded-xl flex-1 sm:flex-initial justify-center cursor-pointer"
+                            className={`text-xs py-1.5 px-3 rounded-xl flex-1 sm:flex-initial justify-center cursor-pointer transition-all ${
+                              isDownloaded
+                                ? "border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500 font-medium"
+                                : ""
+                            }`}
                           >
                             {isDownloading ? (
                               <span className="flex items-center gap-1.5">
                                 <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
                                 <span>Downloading...</span>
+                              </span>
+                            ) : isFileExpired ? (
+                              <span>Expired</span>
+                            ) : isDownloaded ? (
+                              <span className="flex items-center gap-1.5">
+                                <svg
+                                  width="13"
+                                  height="13"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                  <polyline points="7 10 12 15 17 10" />
+                                  <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                <span>Download Again</span>
                               </span>
                             ) : (
                               <span className="flex items-center gap-1.5">

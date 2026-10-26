@@ -56,3 +56,35 @@ export function formatTimestamp(dateValue: string | Date | undefined): string {
     return "";
   }
 }
+
+export function formatTimeAgo(dateValue: string | Date | undefined, nowMs: number = Date.now()): string {
+  if (!dateValue) return "";
+  try {
+    const d = new Date(dateValue);
+    if (isNaN(d.getTime())) return "";
+    const diffMs = nowMs - d.getTime();
+    if (diffMs < 0) return "just now";
+    const totalSecs = Math.floor(diffMs / 1000);
+    if (totalSecs < 45) return "just now";
+    const minutes = Math.floor(totalSecs / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  } catch {
+    return "";
+  }
+}
+
+export function isRecentUpload(dateValue: string | Date | undefined, thresholdMinutes: number = 5, nowMs: number = Date.now()): boolean {
+  if (!dateValue) return false;
+  try {
+    const d = new Date(dateValue);
+    if (isNaN(d.getTime())) return false;
+    const diffMs = nowMs - d.getTime();
+    return diffMs >= 0 && diffMs <= thresholdMinutes * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
