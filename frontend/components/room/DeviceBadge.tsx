@@ -83,7 +83,10 @@ export function DeviceBadge({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold text-ink-50 break-words leading-snug">
+            <span
+              className="text-xs font-semibold text-ink-50 truncate max-w-[120px] xs:max-w-[160px] sm:max-w-[200px] leading-snug"
+              title={device.deviceName}
+            >
               {device.deviceName}
             </span>
             {isCurrentDevice && (
@@ -109,7 +112,7 @@ export function DeviceBadge({
           <button
             type="button"
             onClick={() => onEditDeviceName(device)}
-            className="p-1.5 rounded-lg text-ink-300 hover:text-brand-400 hover:bg-brand-500/10 transition-colors"
+            className="p-1.5 rounded-lg text-ink-300 hover:text-brand-400 hover:bg-brand-500/10 transition-colors cursor-pointer"
             title="Edit your device name"
           >
             <svg
@@ -131,7 +134,7 @@ export function DeviceBadge({
           <button
             type="button"
             onClick={() => onRemoveDevice?.(device)}
-            className="p-1.5 rounded-lg text-ink-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            className="p-1.5 rounded-lg text-ink-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
             title={`Remove ${device.deviceName} from room`}
           >
             <svg

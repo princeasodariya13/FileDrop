@@ -31,7 +31,7 @@ interface RoomViewProps {
   onCreateRoom?: (customDeviceName?: string, customRoomName?: string) => Promise<string>;
   onJoinRoom?: (roomCode: string, customDeviceName?: string) => Promise<string>;
   onUploadFile: (file: File, recipientDeviceIds?: string[]) => Promise<void>;
-  onDownloadFile: (fileId: string, fileName: string) => Promise<void>;
+  onDownloadFile: (fileId: string, fileName: string, silentToast?: boolean) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
   onUpdateRecipients?: (fileId: string, recipientDeviceIds: string[]) => Promise<void>;
   onRemoveDevice?: (deviceId: string) => Promise<void>;
@@ -81,6 +81,8 @@ export function RoomView({
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
 
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+  const [isDownloadingAll, setIsDownloadingAll] = useState<boolean>(false);
+  const [downloadAllProgress, setDownloadAllProgress] = useState<{ current: number; total: number } | null>(null);
   const [fileToDelete, setFileToDelete] = useState<RoomFile | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
@@ -284,12 +286,61 @@ export function RoomView({
     }
   };
 
+  // All shared files in the room authorized for this device to download
+  const downloadableFiles = useMemo(() => {
+    return room.files.filter((file) => {
+      // If file has specific recipient devices, only allow if current device is a recipient or uploader
+      if (!file.recipientDeviceIds || file.recipientDeviceIds.length === 0) return true;
+      if (file.uploadedByDeviceId === currentDeviceId) return true;
+      if (currentDeviceId && file.recipientDeviceIds.includes(currentDeviceId)) return true;
+      return false;
+    });
+  }, [room.files, currentDeviceId]);
+
   const handleDownload = async (fileId: string, fileName: string) => {
     try {
       setDownloadingFileId(fileId);
       await onDownloadFile(fileId, fileName);
     } finally {
       setDownloadingFileId(null);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    if (downloadableFiles.length === 0 || isDownloadingAll) return;
+    setIsDownloadingAll(true);
+    setDownloadAllProgress({ current: 0, total: downloadableFiles.length });
+
+    push(
+      `Starting download of ${downloadableFiles.length} file${
+        downloadableFiles.length === 1 ? "" : "s"
+      }...`,
+      "info"
+    );
+
+    let successCount = 0;
+    for (let i = 0; i < downloadableFiles.length; i++) {
+      const file = downloadableFiles[i];
+      setDownloadAllProgress({ current: i + 1, total: downloadableFiles.length });
+      try {
+        await onDownloadFile(file.fileId, file.fileName, true);
+        successCount++;
+      } catch (err: any) {
+        console.error(`Failed to download ${file.fileName}:`, err);
+      }
+      // Add a 400ms delay between downloads to prevent browsers from blocking multiple downloads
+      if (i < downloadableFiles.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    }
+
+    setIsDownloadingAll(false);
+    setDownloadAllProgress(null);
+
+    if (successCount === downloadableFiles.length) {
+      push(`All ${successCount} files downloaded successfully!`, "success");
+    } else if (successCount > 0) {
+      push(`Downloaded ${successCount} of ${downloadableFiles.length} files.`, "info");
     }
   };
 
@@ -451,9 +502,9 @@ export function RoomView({
       )}
 
       {/* Room Header Card */}
-      <div className="rounded-3xl p-6 sm:p-8 border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-surface pb-5">
-          <div className="space-y-1.5">
+      <div className="rounded-3xl p-4 sm:p-6 md:p-8 border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs space-y-5 sm:space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-surface pb-4 sm:pb-5">
+          <div className="space-y-1.5 min-w-0">
             <div className="flex items-center gap-2">
               <span
                 className={`inline-flex h-2.5 w-2.5 rounded-full ${
@@ -465,17 +516,17 @@ export function RoomView({
               </span>
             </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-2xl sm:text-3xl font-extrabold font-heading text-ink-50">
+            <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-extrabold font-heading text-ink-50 break-words">
                 {room.roomName || "Live Room"}
               </h2>
 
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 font-mono font-bold text-sm tracking-wider">
+              <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 font-mono font-bold text-xs sm:text-sm tracking-wider shrink-0">
                 <span>#{room.roomCode}</span>
                 <button
                   type="button"
                   onClick={copyCode}
-                  className="p-1 rounded-md hover:bg-brand-500/20 text-brand-400 hover:text-brand-300 transition-colors ml-1"
+                  className="p-1 rounded-md hover:bg-brand-500/20 text-brand-400 hover:text-brand-300 transition-colors ml-0.5 cursor-pointer"
                   title="Copy Room Code"
                 >
                   {copiedCode ? (
@@ -509,12 +560,12 @@ export function RoomView({
           </div>
 
           {/* Direct Action Buttons: Copy Invite Link, Show QR, Leave Room */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap">
+          <div className="grid grid-cols-3 sm:flex items-center gap-2 shrink-0 w-full md:w-auto">
             <Button
               variant="secondary"
               size="sm"
               onClick={copyInviteLink}
-              className="text-xs py-1.5 px-2.5 sm:px-3"
+              className="text-xs py-2 px-1.5 sm:px-3 rounded-xl w-full sm:w-auto justify-center cursor-pointer"
             >
               <svg
                 width="14"
@@ -530,14 +581,14 @@ export function RoomView({
                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
               </svg>
-              {copiedLink ? "Link Copied!" : "Copy Link"}
+              <span className="truncate">{copiedLink ? "Copied!" : "Copy Link"}</span>
             </Button>
 
             <Button
               variant="secondary"
               size="sm"
               onClick={() => setIsQRModalOpen(true)}
-              className="text-xs py-1.5 px-2.5 sm:px-3"
+              className="text-xs py-2 px-1.5 sm:px-3 rounded-xl w-full sm:w-auto justify-center cursor-pointer"
             >
               <svg
                 width="14"
@@ -555,14 +606,14 @@ export function RoomView({
                 <rect x="14" y="14" width="7" height="7" />
                 <rect x="3" y="14" width="7" height="7" />
               </svg>
-              Show QR
+              <span className="truncate">Show QR</span>
             </Button>
 
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setIsLeaveModalOpen(true)}
-              className="text-xs py-1.5 px-2.5 sm:px-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20"
+              className="text-xs py-2 px-1.5 sm:px-3 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 w-full sm:w-auto justify-center cursor-pointer"
               title={isHost ? "Delete this room permanently" : "Leave this room"}
             >
               {isHost ? (
@@ -597,7 +648,7 @@ export function RoomView({
                   <line x1="21" y1="12" x2="9" y2="12" />
                 </svg>
               )}
-              {isHost ? "Delete Room" : "Leave Room"}
+              <span className="truncate">{isHost ? "Delete Room" : "Leave Room"}</span>
             </Button>
           </div>
         </div>
@@ -634,7 +685,7 @@ export function RoomView({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         onClick={() => !isUploading && fileInputRef.current?.click()}
-        className={`rounded-3xl p-8 sm:p-10 border-2 border-dashed text-center transition-all ${
+        className={`rounded-3xl p-5 sm:p-8 md:p-10 border-2 border-dashed text-center transition-all ${
           isUploading
             ? "border-surface-hover bg-surface/30 opacity-70 cursor-not-allowed"
             : isDragOver
@@ -684,7 +735,7 @@ export function RoomView({
       {pendingFiles.length > 0 && (
         <div
           ref={dropdownRef}
-          className="relative z-20 rounded-3xl p-5 sm:p-6 border border-surface-hover bg-bg-panel/95 backdrop-blur-xl shadow-xs space-y-4 animate-fade-in overflow-visible"
+          className="relative z-20 rounded-3xl p-4 sm:p-6 border border-surface-hover bg-bg-panel/95 backdrop-blur-xl shadow-xs space-y-4 animate-fade-in overflow-visible"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-surface pb-3">
             <div className="space-y-0.5">
@@ -699,7 +750,7 @@ export function RoomView({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 justify-end">
               <Button
                 variant="ghost"
                 size="sm"
@@ -740,7 +791,7 @@ export function RoomView({
               return (
                 <div
                   key={item.id}
-                  className={`relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl border transition-all ${
+                  className={`relative flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 p-3 rounded-2xl border transition-all ${
                     isDropdownOpen
                       ? "z-40 bg-surface/95 border-brand-500/50 shadow-xl ring-1 ring-brand-500/30"
                       : "z-10 bg-surface/60 border-surface-hover hover:border-brand-500/20"
@@ -766,7 +817,7 @@ export function RoomView({
                   </div>
 
                   {/* Share With Recipient Selector & Remove */}
-                  <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                  <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t border-surface/50 sm:border-0">
                     <div className="relative">
                       <button
                         type="button"
@@ -792,7 +843,7 @@ export function RoomView({
                           </svg>
                         )}
                         <span className="text-[11px] text-ink-400">Share with:</span>
-                        <span className="max-w-[130px] truncate font-semibold">
+                        <span className="max-w-[120px] sm:max-w-[130px] truncate font-semibold">
                           {recipientButtonLabel}
                         </span>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-400">
@@ -802,7 +853,7 @@ export function RoomView({
 
                       {/* Recipient Dropdown Menu — Theme Adaptive Card with High Stacking Context */}
                       {isDropdownOpen && (
-                        <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl dropdown-card p-2.5 z-50 space-y-1.5 animate-scale-up ring-1 ring-black/10 dark:ring-white/10">
+                        <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2.5rem)] rounded-2xl dropdown-card p-2.5 z-50 space-y-1.5 animate-scale-up ring-1 ring-black/10 dark:ring-white/10">
                           <div className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider modal-sub">
                             Select Recipients
                           </div>
@@ -943,17 +994,57 @@ export function RoomView({
       )}
 
       {/* Shared Files Feed — Organized by Uploader */}
-      <div ref={sharedFilesRef} className="rounded-3xl p-6 sm:p-8 border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs space-y-5">
-        <div className="flex items-center justify-between border-b border-surface pb-3">
-          <h3 className="text-sm font-bold font-heading text-ink-50 flex items-center gap-2">
-            <span>Shared Room Files</span>
-            <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-surface-hover text-ink-300">
-              {room.files.length}
+      <div ref={sharedFilesRef} className="rounded-3xl p-4 sm:p-6 md:p-8 border border-surface-hover bg-bg-panel/90 backdrop-blur-xl shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-surface pb-3.5">
+          <div className="flex items-center justify-between sm:justify-start gap-2.5">
+            <h3 className="text-sm font-bold font-heading text-ink-50 flex items-center gap-2">
+              <span>Shared Room Files</span>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-surface-hover text-ink-300">
+                {room.files.length}
+              </span>
+            </h3>
+            <span className="text-[11px] text-ink-400 font-mono hidden xs:inline-block">
+              • Auto-syncs across devices
             </span>
-          </h3>
-          <span className="text-[11px] text-ink-400 font-mono">
-            Auto-syncs across devices
-          </span>
+          </div>
+
+          {/* Download All Button (Top Section) */}
+          {downloadableFiles.length > 0 && (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={isDownloadingAll || isUploading}
+              onClick={handleDownloadAll}
+              className="text-xs py-2 px-3.5 rounded-xl font-semibold w-full sm:w-auto justify-center shadow-xs cursor-pointer"
+            >
+              {isDownloadingAll ? (
+                <span className="flex items-center gap-2">
+                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  <span>
+                    Downloading {downloadAllProgress?.current || 1} of {downloadAllProgress?.total || downloadableFiles.length}...
+                  </span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span>Download All ({downloadableFiles.length})</span>
+                </span>
+              )}
+            </Button>
+          )}
         </div>
 
         {room.files.length === 0 ? (
@@ -999,7 +1090,7 @@ export function RoomView({
                 </div>
 
                 {/* Files uploaded by this device */}
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {group.files.map((file) => {
                     const isDownloading = downloadingFileId === file.fileId;
                     const canDelete = file.uploadedByDeviceId === currentDeviceId;
@@ -1008,10 +1099,10 @@ export function RoomView({
                     return (
                       <div
                         key={file.fileId}
-                        className="flex items-center justify-between p-3.5 rounded-2xl bg-surface/70 border border-surface-hover hover:border-brand-500/30 transition-all"
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-surface/70 border border-surface-hover hover:border-brand-500/30 transition-all gap-3"
                       >
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500/20 text-brand-400">
+                        <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500/20 text-brand-400 mt-0.5 sm:mt-0">
                             <svg
                               width="20"
                               height="20"
@@ -1025,50 +1116,73 @@ export function RoomView({
                               <path d="M13 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V9L13 2Z" />
                             </svg>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p
-                                className="truncate text-xs font-semibold text-ink-50"
-                                title={file.fileName}
-                              >
-                                {file.fileName}
-                              </p>
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <p
+                              className="truncate text-xs sm:text-sm font-semibold text-ink-50 leading-snug"
+                              title={file.fileName}
+                            >
+                              {file.fileName}
+                            </p>
+                            <div className="flex items-center gap-2 flex-wrap text-[11px] text-ink-400 font-mono">
+                              <span>{formatBytes(file.sizeBytes)}</span>
+                              {file.createdAt && (
+                                <span className="hidden xs:inline">• {formatTimestamp(file.createdAt)}</span>
+                              )}
                               {/* Recipient status pill */}
                               {recipientInfo.isPrivate ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-sans font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
                                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                                   </svg>
-                                  Shared with: {recipientInfo.text}
+                                  <span>Shared with: {recipientInfo.text}</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-surface text-ink-400 border border-surface-hover">
-                                  Shared with: All devices
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-sans font-medium bg-surface text-ink-400 border border-surface-hover">
+                                  <span>Shared with: All devices</span>
                                 </span>
                               )}
                             </div>
-                            <p className="text-[11px] text-ink-400 font-mono mt-0.5">
-                              {formatBytes(file.sizeBytes)}
-                              {file.createdAt && (
-                                <> • {formatTimestamp(file.createdAt)}</>
-                              )}
-                            </p>
                           </div>
                         </div>
 
-                        {/* Desktop Actions */}
-                        <div className="hidden sm:flex items-center gap-2 ml-3 shrink-0">
+                        {/* File Action Controls */}
+                        <div className="flex items-center justify-end sm:justify-start gap-2 pt-2 sm:pt-0 border-t border-surface/50 sm:border-0 shrink-0">
+                          {/* Individual Download Button */}
                           <Button
                             size="sm"
-                            disabled={isDownloading}
+                            variant="secondary"
+                            disabled={isDownloading || isDownloadingAll}
                             onClick={() => handleDownload(file.fileId, file.fileName)}
-                            className="text-xs"
+                            className="text-xs py-1.5 px-3 rounded-xl flex-1 sm:flex-initial justify-center cursor-pointer"
                           >
-                            {isDownloading ? "Downloading..." : "Download"}
+                            {isDownloading ? (
+                              <span className="flex items-center gap-1.5">
+                                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+                                <span>Downloading...</span>
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1.5">
+                                <svg
+                                  width="13"
+                                  height="13"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                  <polyline points="7 10 12 15 17 10" />
+                                  <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                <span>Download</span>
+                              </span>
+                            )}
                           </Button>
 
-                          {/* Edit Recipients button: uploader or host can modify sharing permissions */}
+                          {/* Edit Recipients button (uploader only) */}
                           {canDelete && onUpdateRecipients && (
                             <button
                               type="button"
@@ -1076,12 +1190,12 @@ export function RoomView({
                                 setFileToEditRecipients(file);
                                 setEditRecipientIds(file.recipientDeviceIds || []);
                               }}
-                              className="p-2 rounded-xl text-ink-400 hover:text-brand-400 hover:bg-brand-500/10 transition-colors"
+                              className="p-1.5 sm:p-2 rounded-xl text-ink-400 hover:text-brand-400 hover:bg-brand-500/10 border border-surface sm:border-transparent transition-colors cursor-pointer"
                               title="Edit recipients for this file"
                             >
                               <svg
-                                width="16"
-                                height="16"
+                                width="15"
+                                height="15"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -1096,17 +1210,17 @@ export function RoomView({
                             </button>
                           )}
 
-                          {/* Delete button: strictly only rendered for files uploaded by this device */}
+                          {/* Delete button (uploader only) */}
                           {canDelete && (
                             <button
                               type="button"
                               onClick={() => setFileToDelete(file)}
-                              className="p-2 rounded-xl text-ink-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              className="p-1.5 sm:p-2 rounded-xl text-ink-400 hover:text-red-400 hover:bg-red-500/10 border border-surface sm:border-transparent transition-colors cursor-pointer"
                               title="Delete this file"
                             >
                               <svg
-                                width="16"
-                                height="16"
+                                width="15"
+                                height="15"
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
@@ -1120,83 +1234,6 @@ export function RoomView({
                                 <line x1="14" y1="11" x2="14" y2="17" />
                               </svg>
                             </button>
-                          )}
-                        </div>
-
-                        {/* Mobile Actions: Compact Download + 3-Dot Menu */}
-                        <div className="flex sm:hidden items-center gap-1.5 ml-2 shrink-0">
-                          <Button
-                            size="sm"
-                            disabled={isDownloading}
-                            onClick={() => handleDownload(file.fileId, file.fileName)}
-                            className="text-xs px-2.5 py-1"
-                          >
-                            {isDownloading ? "..." : "Download"}
-                          </Button>
-
-                          {canDelete && (
-                            <div className="relative">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setActiveFileMenuId(
-                                    activeFileMenuId === file.fileId ? null : file.fileId
-                                  )
-                                }
-                                className="p-1.5 rounded-lg text-ink-300 hover:text-ink-50 bg-surface hover:bg-surface-hover border border-surface-hover transition-colors"
-                                title="File Options"
-                              >
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <circle cx="12" cy="12" r="1" />
-                                  <circle cx="12" cy="5" r="1" />
-                                  <circle cx="12" cy="19" r="1" />
-                                </svg>
-                              </button>
-
-                              {activeFileMenuId === file.fileId && (
-                                <>
-                                  <div
-                                    className="fixed inset-0 z-40"
-                                    onClick={() => setActiveFileMenuId(null)}
-                                  />
-                                  <div className="absolute right-0 top-full mt-1.5 w-44 rounded-2xl dropdown-card p-1.5 z-50 shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-scale-up">
-                                    {onUpdateRecipients && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setActiveFileMenuId(null);
-                                          setFileToEditRecipients(file);
-                                          setEditRecipientIds(file.recipientDeviceIds || []);
-                                        }}
-                                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-medium dropdown-item transition-colors text-left"
-                                      >
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand-400">
-                                          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                                          <circle cx="8.5" cy="7" r="4" />
-                                          <polyline points="17 11 19 13 23 9" />
-                                        </svg>
-                                        <span>Edit Recipients</span>
-                                      </button>
-                                    )}
-
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveFileMenuId(null);
-                                        setFileToDelete(file);
-                                      }}
-                                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors text-left"
-                                    >
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <polyline points="3 6 5 6 21 6" />
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                      </svg>
-                                      <span>Delete File</span>
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
                           )}
                         </div>
                       </div>

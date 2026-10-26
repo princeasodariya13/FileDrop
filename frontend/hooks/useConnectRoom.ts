@@ -887,7 +887,7 @@ export function useConnectRoom(initialCode?: string) {
   };
 
   // Download a shared room file
-  const downloadFile = async (fileId: string, fileName: string) => {
+  const downloadFile = async (fileId: string, fileName: string, silentToast?: boolean) => {
     if (!room) return;
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -916,7 +916,9 @@ export function useConnectRoom(initialCode?: string) {
       link.click();
       document.body.removeChild(link);
 
-      push(`Starting download: ${fileName}`, "info");
+      if (!silentToast) {
+        push(`Starting download: ${fileName}`, "info");
+      }
     } catch (err: any) {
       push(err.message || "Could not download file.", "error");
     }
