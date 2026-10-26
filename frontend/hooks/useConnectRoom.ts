@@ -794,8 +794,12 @@ export function useConnectRoom(initialCode?: string) {
     }
   };
 
-  // Upload a single file directly into the active room with optional private recipient filtering
-  const uploadFileToRoom = async (file: File, recipientDeviceIds?: string[]) => {
+  // Upload a single file directly into the active room with optional private recipient filtering and expiration duration
+  const uploadFileToRoom = async (
+    file: File,
+    recipientDeviceIds?: string[],
+    expirationSeconds: number = 900
+  ) => {
     if (!room || !deviceId || !deviceToken) {
       push("You must be connected to a room to upload files.", "error");
       return;
@@ -809,9 +813,9 @@ export function useConnectRoom(initialCode?: string) {
       const { createUploadSession, completeUpload } = await import("@/lib/api/uploads");
       const { uploadPartWithProgress } = await import("@/lib/api/client");
 
-      // 1. Initialize upload session using existing FileDrop upload API (/api/uploads/session)
+      // 1. Initialize upload session using FileDrop upload API (/api/uploads/session) with custom room file TTL
       const session = await createUploadSession(file, {
-        expirationSeconds: 3600, // 1 hour room file TTL
+        expirationSeconds: expirationSeconds || 900,
         downloadLimit: null,
       });
 
@@ -842,7 +846,16 @@ export function useConnectRoom(initialCode?: string) {
       }
 
       // 3. Complete multipart upload on backend
-      const uploadedFile = await completeUpload(session.sessionId, completedParts);
+      const uploadedFile = await completeUpload(
+        session.sessionId,
+        completedParts,
+        undefined,
+        undefined,
+        {
+          expirationSeconds: expirationSeconds || 900,
+          downloadLimit: null,
+        }
+      );
       setUploadProgress(98);
 
       // 4. Attach file to room with optional recipient filtering
@@ -879,10 +892,10 @@ export function useConnectRoom(initialCode?: string) {
   };
 
   // Upload multiple files sequentially to prevent concurrent collisions
-  const uploadFilesToRoom = async (files: File[]) => {
+  const uploadFilesToRoom = async (files: File[], expirationSeconds: number = 900) => {
     if (!files || files.length === 0) return;
     for (let i = 0; i < files.length; i++) {
-      await uploadFileToRoom(files[i]);
+      await uploadFileToRoom(files[i], undefined, expirationSeconds);
     }
   };
 

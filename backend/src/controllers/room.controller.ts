@@ -566,6 +566,7 @@ export async function addFileToRoom(req: Request, res: Response, next: NextFunct
         uploadedByDeviceName: uploaderName,
         recipientDeviceIds: cleanRecipientIds || [],
         createdAt: now,
+        expiresAt: file.expiresAt,
       };
       room.files.push(addedFile);
     }

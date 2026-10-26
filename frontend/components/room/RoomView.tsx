@@ -7,9 +7,22 @@ import { DeviceBadge } from "./DeviceBadge";
 import { ActiveRoomsSelector } from "./ActiveRoomsSelector";
 import { Button } from "@/components/ui/Button";
 import { QRCodeModal } from "@/components/ui/QRCodeModal";
-import { formatBytes, formatTimestamp } from "@/utils/format";
+import { formatBytes, formatTimestamp, formatRelativeExpiry } from "@/utils/format";
 import { useToast } from "@/components/ui/Toast";
 import { scrollToElement } from "@/utils/scroll";
+
+export const ROOM_EXPIRATION_OPTIONS = [
+  { label: "1 minute", value: 60 },
+  { label: "5 minutes", value: 300 },
+  { label: "15 minutes (Default)", value: 900 },
+  { label: "30 minutes", value: 1800 },
+  { label: "45 minutes", value: 2700 },
+  { label: "1 hour", value: 3600 },
+  { label: "2 hours", value: 7200 },
+  { label: "3 hours", value: 10800 },
+  { label: "6 hours", value: 21600 },
+  { label: "12 hours (Max)", value: 43200 },
+];
 
 interface PendingFileItem {
   id: string;
@@ -27,10 +40,11 @@ interface RoomViewProps {
   isUploading: boolean;
   uploadProgress: number;
   uploadingFileName?: string | null;
+  initialPendingFiles?: PendingFileItem[];
   onSwitchRoom?: (roomCode: string) => Promise<void>;
   onCreateRoom?: (customDeviceName?: string, customRoomName?: string) => Promise<string>;
   onJoinRoom?: (roomCode: string, customDeviceName?: string) => Promise<string>;
-  onUploadFile: (file: File, recipientDeviceIds?: string[]) => Promise<void>;
+  onUploadFile: (file: File, recipientDeviceIds?: string[], expirationSeconds?: number) => Promise<void>;
   onDownloadFile: (fileId: string, fileName: string, silentToast?: boolean) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
   onUpdateRecipients?: (fileId: string, recipientDeviceIds: string[]) => Promise<void>;
@@ -50,6 +64,7 @@ export function RoomView({
   isUploading,
   uploadProgress,
   uploadingFileName,
+  initialPendingFiles,
   onSwitchRoom,
   onCreateRoom,
   onJoinRoom,
@@ -76,9 +91,20 @@ export function RoomView({
     setMounted(true);
   }, []);
 
-  // Pending files selection state (files selected but not yet uploaded)
-  const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>([]);
+  // Pending files selection & expiration timer state (default: 15 min = 900s)
+  const [pendingFiles, setPendingFiles] = useState<PendingFileItem[]>(() => initialPendingFiles || []);
+  const [selectedExpirationSeconds, setSelectedExpirationSeconds] = useState<number>(900);
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
+
+  // Live ticking clock for accurate real-time file expiration countdowns
+  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState<boolean>(false);
@@ -257,7 +283,7 @@ export function RoomView({
     );
   };
 
-  // Start uploading pending files sequentially
+  // Start uploading pending files sequentially with chosen expiration duration
   const uploadPendingFiles = async () => {
     if (pendingFiles.length === 0 || isUploading) return;
 
@@ -268,7 +294,8 @@ export function RoomView({
       try {
         await onUploadFile(
           item.file,
-          item.recipientDeviceIds.length > 0 ? item.recipientDeviceIds : undefined
+          item.recipientDeviceIds.length > 0 ? item.recipientDeviceIds : undefined,
+          selectedExpirationSeconds
         );
         // Remove successfully uploaded file from pending list
         setPendingFiles((prev) => prev.filter((p) => p.id !== item.id));
@@ -283,16 +310,18 @@ export function RoomView({
     }
   };
 
-  // All shared files in the room authorized for this device to download
+  // All shared files in the room authorized for this device to download (excluding expired)
   const downloadableFiles = useMemo(() => {
     return room.files.filter((file) => {
+      // Exclude expired files
+      if (file.expiresAt && new Date(file.expiresAt).getTime() <= currentTime) return false;
       // If file has specific recipient devices, only allow if current device is a recipient or uploader
       if (!file.recipientDeviceIds || file.recipientDeviceIds.length === 0) return true;
       if (file.uploadedByDeviceId === currentDeviceId) return true;
       if (currentDeviceId && file.recipientDeviceIds.includes(currentDeviceId)) return true;
       return false;
     });
-  }, [room.files, currentDeviceId]);
+  }, [room.files, currentDeviceId, currentTime]);
 
   const handleDownload = async (fileId: string, fileName: string) => {
     try {
@@ -951,7 +980,63 @@ export function RoomView({
             })}
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-3">
+          <div className="pt-3 border-t border-surface/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* File Visibility / Expiration Dropdown */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <label
+                htmlFor="room-file-timer-select"
+                className="flex items-center gap-1.5 text-xs font-medium text-ink-300 shrink-0"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-brand-500 shrink-0"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span>Expires in:</span>
+              </label>
+
+              <div className="relative inline-block">
+                <select
+                  id="room-file-timer-select"
+                  value={selectedExpirationSeconds}
+                  onChange={(e) => setSelectedExpirationSeconds(Number(e.target.value))}
+                  disabled={isUploading}
+                  className="focus-ring rounded-xl border border-surface-hover bg-surface/90 hover:border-brand-500/50 py-1.5 pl-3 pr-8 text-xs font-semibold text-ink-100 transition-all cursor-pointer appearance-none shadow-xs disabled:opacity-50"
+                  title="Choose how long these files stay visible in the room"
+                >
+                  {ROOM_EXPIRATION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value} className="bg-bg-panel text-ink-100 py-1">
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-ink-400">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Button */}
             <Button
               className="w-full sm:w-auto text-xs px-6"
               disabled={isUploading}
@@ -1125,6 +1210,28 @@ export function RoomView({
                               {file.createdAt && (
                                 <span suppressHydrationWarning className="hidden xs:inline">• {formatTimestamp(file.createdAt)}</span>
                               )}
+                              {/* Timer / Expiration pill */}
+                              {file.expiresAt && (
+                                <span
+                                  suppressHydrationWarning
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-sans font-medium ${
+                                    formatRelativeExpiry(file.expiresAt, currentTime) === "expired"
+                                      ? "bg-red-500/15 text-red-400 border border-red-500/30"
+                                      : "bg-brand-500/10 text-brand-500 dark:text-brand-400 border border-brand-500/20"
+                                  }`}
+                                  title={`Expires: ${new Date(file.expiresAt).toLocaleTimeString()}`}
+                                >
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                  </svg>
+                                  <span>
+                                    {formatRelativeExpiry(file.expiresAt, currentTime) === "expired"
+                                      ? "Expired"
+                                      : `Expires ${formatRelativeExpiry(file.expiresAt, currentTime)}`}
+                                  </span>
+                                </span>
+                              )}
                               {/* Recipient status pill */}
                               {recipientInfo.isPrivate ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-sans font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
@@ -1149,7 +1256,7 @@ export function RoomView({
                           <Button
                             size="sm"
                             variant="secondary"
-                            disabled={isDownloading || isDownloadingAll}
+                            disabled={isDownloading || isDownloadingAll || (file.expiresAt ? new Date(file.expiresAt).getTime() <= currentTime : false)}
                             onClick={() => handleDownload(file.fileId, file.fileName)}
                             className="text-xs py-1.5 px-3 rounded-xl flex-1 sm:flex-initial justify-center cursor-pointer"
                           >

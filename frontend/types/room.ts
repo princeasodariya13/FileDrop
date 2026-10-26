@@ -18,6 +18,7 @@ export interface RoomFile {
   uploadedByDeviceName: string;
   recipientDeviceIds?: string[];
   createdAt: string;
+  expiresAt?: string | null;
 }
 
 export interface RoomState {

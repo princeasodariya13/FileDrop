@@ -2,6 +2,7 @@ import { Inter, Outfit } from "next/font/google";
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -112,8 +113,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/logo-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="theme-color" content="#F1470C" />
-        <script
+        <Script
+          id="filedrop-theme-init"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               try {

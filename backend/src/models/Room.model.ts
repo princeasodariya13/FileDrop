@@ -22,6 +22,7 @@ export interface IRoomFile {
   uploadedByDeviceName: string;
   recipientDeviceIds?: string[];
   createdAt: Date;
+  expiresAt?: Date | null;
 }
 
 export interface IRoom extends Document {
@@ -67,6 +68,7 @@ const RoomFileSchema = new Schema<IRoomFile>(
     uploadedByDeviceName: { type: String, required: true, maxlength: 50 },
     recipientDeviceIds: { type: [String], default: [] },
     createdAt: { type: Date, default: Date.now },
+    expiresAt: { type: Date, required: false, default: null },
   },
   { _id: false }
 );

@@ -9,7 +9,12 @@ export const createUploadSessionSchema = z.object({
     .positive()
     .max(env.maxFileSizeBytes, { message: "File exceeds the maximum allowed size." }),
   mimeType: z.string().min(1).max(255),
-  expirationSeconds: z.number().int().refine((val) => [60, 900, 1800, 2700, 3600, 7200].includes(val), { message: "Invalid expiration duration." }).optional(),
+  expirationSeconds: z
+    .number()
+    .int()
+    .min(60, { message: "Expiration must be at least 1 minute." })
+    .max(43200, { message: "Expiration cannot exceed 12 hours." })
+    .optional(),
   downloadLimit: z.number().int().positive().max(1000).nullable().optional(),
 });
 
@@ -19,7 +24,12 @@ export const completeUploadSchema = z.object({
   sessionId: z.string().min(1).max(100),
   code: z.string().optional(),
   bundleId: z.string().optional(),
-  expirationSeconds: z.number().int().refine((val) => [60, 900, 1800, 2700, 3600, 7200].includes(val), { message: "Invalid expiration duration." }).optional(),
+  expirationSeconds: z
+    .number()
+    .int()
+    .min(60, { message: "Expiration must be at least 1 minute." })
+    .max(43200, { message: "Expiration cannot exceed 12 hours." })
+    .optional(),
   downloadLimit: z.number().int().positive().max(1000).nullable().optional(),
   parts: z
     .array(
