@@ -215,6 +215,9 @@ export function useConnectRoom(initialCode?: string) {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadingFileName, setUploadingFileName] = useState<string | null>(null);
 
+  const currentUploadControllerRef = useRef<AbortController | null>(null);
+  const currentSessionIdRef = useRef<string | null>(null);
+
   const socketRef = useRef<Socket | null>(null);
   const { push } = useToast();
 
@@ -794,7 +797,27 @@ export function useConnectRoom(initialCode?: string) {
     }
   };
 
-  // Upload a single file directly into the active room with optional private recipient filtering and expiration duration
+  // Cancel an active room file upload immediately and clean up reservations
+  const cancelRoomUpload = useCallback(async () => {
+    if (currentUploadControllerRef.current) {
+      currentUploadControllerRef.current.abort();
+      currentUploadControllerRef.current = null;
+    }
+    const sessId = currentSessionIdRef.current;
+    if (sessId) {
+      currentSessionIdRef.current = null;
+      try {
+        const { abortUpload } = await import("@/lib/api/uploads");
+        abortUpload(sessId).catch(() => {});
+      } catch {}
+    }
+    setIsUploading(false);
+    setUploadProgress(0);
+    setUploadingFileName(null);
+    push("Upload cancelled", "info");
+  }, [push]);
+
+  // Upload a single file directly into the active room with high-speed parallel workers and cancellation support
   const uploadFileToRoom = async (
     file: File,
     recipientDeviceIds?: string[],
@@ -805,13 +828,19 @@ export function useConnectRoom(initialCode?: string) {
       return;
     }
 
+    const abortController = new AbortController();
+    currentUploadControllerRef.current = abortController;
+    const signal = abortController.signal;
+
     setIsUploading(true);
     setUploadProgress(0);
     setUploadingFileName(file.name);
 
     try {
-      const { createUploadSession, completeUpload } = await import("@/lib/api/uploads");
+      const { createUploadSession, completeUpload, abortUpload } = await import("@/lib/api/uploads");
       const { uploadPartWithProgress } = await import("@/lib/api/client");
+
+      if (signal.aborted) throw new DOMException("Upload cancelled", "AbortError");
 
       // 1. Initialize upload session using FileDrop upload API (/api/uploads/session) with custom room file TTL
       const session = await createUploadSession(file, {
@@ -819,33 +848,67 @@ export function useConnectRoom(initialCode?: string) {
         downloadLimit: null,
       });
 
-      const partSize = session.partSizeBytes;
-      const completedParts = [];
-
-      // 2. Upload parts directly to Backblaze B2 via presigned URLs with progress
-      for (let i = 0; i < session.parts.length; i++) {
-        const part = session.parts[i];
-        const start = (part.partNumber - 1) * partSize;
-        const end = Math.min(start + partSize, file.size);
-        const chunk = file.slice(start, end);
-
-        const etag = await uploadPartWithProgress(
-          part.presignedUrl,
-          chunk,
-          (loaded) => {
-            const overallLoaded = i * partSize + loaded;
-            const pct = Math.min(95, Math.round((overallLoaded / file.size) * 100));
-            setUploadProgress(pct);
-          }
-        );
-
-        completedParts.push({
-          partNumber: part.partNumber,
-          etag,
-        });
+      if (signal.aborted) {
+        abortUpload(session.sessionId).catch(() => {});
+        throw new DOMException("Upload cancelled", "AbortError");
       }
 
-      // 3. Complete multipart upload on backend
+      currentSessionIdRef.current = session.sessionId;
+      const partSize = session.partSizeBytes;
+
+      // 2. High-speed parallel worker pool: upload parts concurrently (up to 4 parallel HTTP streams)
+      const CONCURRENCY = Math.min(4, Math.max(1, session.parts.length));
+      const completedParts: { partNumber: number; etag: string }[] = [];
+      const partProgressMap = new Map<number, number>();
+
+      let nextIndex = 0;
+      let partError: any = null;
+
+      const worker = async () => {
+        while (nextIndex < session.parts.length && !partError && !signal.aborted) {
+          const index = nextIndex++;
+          const part = session.parts[index];
+          const start = (part.partNumber - 1) * partSize;
+          const end = Math.min(start + partSize, file.size);
+          const chunk = file.slice(start, end);
+
+          try {
+            const etag = await uploadPartWithProgress(
+              part.presignedUrl,
+              chunk,
+              (loaded) => {
+                if (signal.aborted) return;
+                partProgressMap.set(part.partNumber, loaded);
+                const totalLoaded = Array.from(partProgressMap.values()).reduce((a, b) => a + b, 0);
+                const pct = Math.min(95, Math.round((totalLoaded / file.size) * 100));
+                setUploadProgress(pct);
+              },
+              signal
+            );
+
+            completedParts.push({
+              partNumber: part.partNumber,
+              etag,
+            });
+          } catch (err: any) {
+            partError = err;
+            throw err;
+          }
+        }
+      };
+
+      const workers = Array.from({ length: CONCURRENCY }, () => worker());
+      await Promise.all(workers);
+
+      if (signal.aborted) {
+        abortUpload(session.sessionId).catch(() => {});
+        throw new DOMException("Upload cancelled", "AbortError");
+      }
+
+      // 3. Sort parts sequentially and complete multipart upload on backend
+      completedParts.sort((a, b) => a.partNumber - b.partNumber);
+      setUploadProgress(96);
+
       const uploadedFile = await completeUpload(
         session.sessionId,
         completedParts,
@@ -857,6 +920,8 @@ export function useConnectRoom(initialCode?: string) {
         }
       );
       setUploadProgress(98);
+
+      if (signal.aborted) throw new DOMException("Upload cancelled", "AbortError");
 
       // 4. Attach file to room with optional recipient filtering
       const attachRes = await fetch(`${API_BASE}/api/rooms/${room.roomCode}/files`, {
@@ -882,9 +947,16 @@ export function useConnectRoom(initialCode?: string) {
       setUploadProgress(100);
       push(`Shared ${file.name} to room`, "success");
     } catch (err: any) {
+      if (err?.name === "AbortError" || err?.message === "Upload cancelled") {
+        // User cancelled upload; already cleaned up
+        return;
+      }
       console.error("Room upload error:", err);
       push(err.message || "Failed to upload file to room.", "error");
+      throw err;
     } finally {
+      currentUploadControllerRef.current = null;
+      currentSessionIdRef.current = null;
       setIsUploading(false);
       setUploadProgress(0);
       setUploadingFileName(null);
@@ -895,6 +967,7 @@ export function useConnectRoom(initialCode?: string) {
   const uploadFilesToRoom = async (files: File[], expirationSeconds: number = 900) => {
     if (!files || files.length === 0) return;
     for (let i = 0; i < files.length; i++) {
+      if (currentUploadControllerRef.current?.signal.aborted) break;
       await uploadFileToRoom(files[i], undefined, expirationSeconds);
     }
   };
@@ -1418,6 +1491,7 @@ export function useConnectRoom(initialCode?: string) {
     joinRoom,
     uploadFileToRoom,
     uploadFilesToRoom,
+    cancelRoomUpload,
     downloadFile,
     updateFileRecipients,
     deleteFileFromRoom,

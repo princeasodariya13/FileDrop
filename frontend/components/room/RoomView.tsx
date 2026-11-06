@@ -45,6 +45,7 @@ interface RoomViewProps {
   onCreateRoom?: (customDeviceName?: string, customRoomName?: string) => Promise<string>;
   onJoinRoom?: (roomCode: string, customDeviceName?: string) => Promise<string>;
   onUploadFile: (file: File, recipientDeviceIds?: string[], expirationSeconds?: number) => Promise<void>;
+  onCancelUpload?: () => void;
   onDownloadFile: (fileId: string, fileName: string, silentToast?: boolean) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
   onUpdateRecipients?: (fileId: string, recipientDeviceIds: string[]) => Promise<void>;
@@ -69,6 +70,7 @@ export function RoomView({
   onCreateRoom,
   onJoinRoom,
   onUploadFile,
+  onCancelUpload,
   onDownloadFile,
   onDeleteFile,
   onUpdateRecipients,
@@ -312,13 +314,25 @@ export function RoomView({
     );
   };
 
-  // Start uploading pending files sequentially with chosen expiration duration
+  const isUploadCancelledRef = useRef<boolean>(false);
+
+  const handleCancelUpload = () => {
+    isUploadCancelledRef.current = true;
+    if (onCancelUpload) {
+      onCancelUpload();
+    }
+  };
+
+  // Start uploading pending files with chosen expiration duration and cancellation support
   const uploadPendingFiles = async () => {
     if (pendingFiles.length === 0 || isUploading) return;
 
+    isUploadCancelledRef.current = false;
     let anyUploaded = false;
     const itemsToUpload = [...pendingFiles];
+
     for (let i = 0; i < itemsToUpload.length; i++) {
+      if (isUploadCancelledRef.current) break;
       const item = itemsToUpload[i];
       try {
         await onUploadFile(
@@ -326,11 +340,13 @@ export function RoomView({
           item.recipientDeviceIds.length > 0 ? item.recipientDeviceIds : undefined,
           selectedExpirationSeconds
         );
-        // Remove successfully uploaded file from pending list
-        setPendingFiles((prev) => prev.filter((p) => p.id !== item.id));
-        anyUploaded = true;
+        // Only remove from pending list if not cancelled during upload
+        if (!isUploadCancelledRef.current) {
+          setPendingFiles((prev) => prev.filter((p) => p.id !== item.id));
+          anyUploaded = true;
+        }
       } catch (err: any) {
-        // Stop sequential queue on error so remaining files are preserved for retry
+        // Stop sequential queue on error or user cancellation
         break;
       }
     }
@@ -1108,35 +1124,69 @@ export function RoomView({
               </div>
             </div>
 
-            {/* Action Button */}
-            <Button
-              className="w-full sm:w-auto text-xs px-6"
-              disabled={isUploading}
-              onClick={uploadPendingFiles}
-            >
-              {isUploading ? (
-                <span className="flex items-center gap-2">
-                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Uploading...
-                </span>
-              ) : (
-                `Upload & Share ${pendingFiles.length} ${
+            {/* Action Buttons */}
+            {isUploading ? (
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Button
+                  className="w-full sm:w-auto text-xs px-5"
+                  disabled
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Uploading...
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleCancelUpload}
+                  className="text-xs px-4 border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500 font-semibold cursor-pointer shrink-0"
+                  title="Cancel upload"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                className="w-full sm:w-auto text-xs px-6"
+                disabled={isUploading}
+                onClick={uploadPendingFiles}
+              >
+                {`Upload & Share ${pendingFiles.length} ${
                   pendingFiles.length === 1 ? "File" : "Files"
-                }`
-              )}
-            </Button>
+                }`}
+              </Button>
+            )}
           </div>
         </div>
       )}
 
       {/* Uploading Status Progress Bar */}
       {isUploading && (
-        <div className="rounded-card p-4 bg-brand-500/10 border border-brand-500/30 space-y-2 animate-fade-in">
-          <div className="flex items-center justify-between text-xs font-semibold text-brand-300">
-            <span className="truncate max-w-[70%]">
+        <div className="rounded-card p-4 bg-brand-500/10 border border-brand-500/30 space-y-2.5 animate-fade-in">
+          <div className="flex items-center justify-between text-xs font-semibold text-brand-300 gap-3">
+            <span className="truncate flex-1">
               {uploadingFileName ? `Uploading ${uploadingFileName}...` : "Uploading to shared room..."}
             </span>
-            <span className="font-mono">{uploadProgress}%</span>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="font-mono">{uploadProgress}%</span>
+              <button
+                type="button"
+                onClick={handleCancelUpload}
+                className="px-2.5 py-1 text-xs font-medium rounded-lg bg-red-500/20 text-red-600 dark:text-red-300 hover:bg-red-500/30 border border-red-500/30 transition-colors flex items-center gap-1 cursor-pointer"
+                title="Cancel upload"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                <span>Cancel</span>
+              </button>
+            </div>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-surface">
             <div

@@ -30,6 +30,7 @@ export function ConnectDevicesSection() {
     joinRoom,
     uploadFileToRoom,
     uploadFilesToRoom,
+    cancelRoomUpload,
     downloadFile,
     updateFileRecipients,
     deleteFileFromRoom,
@@ -86,6 +87,7 @@ export function ConnectDevicesSection() {
           onCreateRoom={createRoom}
           onJoinRoom={joinRoom}
           onUploadFile={uploadFileToRoom}
+          onCancelUpload={cancelRoomUpload}
           onDownloadFile={downloadFile}
           onDeleteFile={deleteFileFromRoom}
           onUpdateRecipients={updateFileRecipients}

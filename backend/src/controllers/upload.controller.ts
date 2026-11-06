@@ -12,6 +12,47 @@ import { UploadSessionModel } from "@/models/UploadSession.model";
 import { FileModel } from "@/models/File.model";
 import { logger } from "@/utils/logger";
 
+/**
+ * Dynamically computes an optimal part size based on file size.
+ * Allows multiple parts to upload in parallel via concurrent HTTP streams,
+ * massively increasing upload speed while adhering to AWS S3 & Backblaze B2 specifications:
+ * - Every part except the final part must be >= 5MB.
+ * - Total parts must be <= 10,000.
+ */
+export function calculateOptimalPartSize(sizeBytes: number, maxConfiguredPartSize: number): number {
+  const S3_MIN_PART_SIZE = 5 * 1024 * 1024; // 5 MB
+  const S3_MAX_PARTS = 10000;
+
+  // Single part for very small files
+  if (sizeBytes <= S3_MIN_PART_SIZE) {
+    return S3_MIN_PART_SIZE;
+  }
+
+  // Adaptive sizing to achieve optimal parallel concurrency (typically 4-8 parallelizable parts):
+  let optimalSize: number;
+  if (sizeBytes <= 30 * 1024 * 1024) {
+    // 5MB - 30MB: 5MB parts (gives 2 to 6 parts -> up to 4 parallel workers)
+    optimalSize = 5 * 1024 * 1024;
+  } else if (sizeBytes <= 100 * 1024 * 1024) {
+    // 30MB - 100MB: 8MB parts (gives 4 to 13 parts)
+    optimalSize = 8 * 1024 * 1024;
+  } else if (sizeBytes <= 500 * 1024 * 1024) {
+    // 100MB - 500MB: 16MB parts
+    optimalSize = 16 * 1024 * 1024;
+  } else if (sizeBytes <= 2 * 1024 * 1024 * 1024) {
+    // 500MB - 2GB: 32MB parts
+    optimalSize = 32 * 1024 * 1024;
+  } else {
+    optimalSize = Math.min(maxConfiguredPartSize, 64 * 1024 * 1024);
+  }
+
+  // Ensure totalParts does not exceed S3's 10,000 part limit
+  const minRequiredPartSize = Math.ceil(sizeBytes / S3_MAX_PARTS);
+  optimalSize = Math.max(optimalSize, minRequiredPartSize, S3_MIN_PART_SIZE);
+
+  return optimalSize;
+}
+
 /** POST /api/uploads/session — validate, reserve storage, create multipart upload in parallel */
 export async function createUploadSession(req: Request, res: Response, next: NextFunction) {
   try {
@@ -23,7 +64,7 @@ export async function createUploadSession(req: Request, res: Response, next: Nex
     const reservationId = new Types.ObjectId();
     const sessionId = generateSessionId();
 
-    const partSize = env.multipartPartSizeBytes;
+    const partSize = calculateOptimalPartSize(input.sizeBytes, env.multipartPartSizeBytes);
     const totalParts = Math.max(1, Math.ceil(input.sizeBytes / partSize));
 
     // 1. Concurrently execute atomic ledger reservation & B2 multipart initialization.

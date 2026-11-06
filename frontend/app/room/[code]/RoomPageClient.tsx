@@ -34,6 +34,7 @@ function RoomContent({ code }: RoomPageClientProps) {
     switchRoom,
     uploadFileToRoom,
     uploadFilesToRoom,
+    cancelRoomUpload,
     downloadFile,
     updateFileRecipients,
     deleteFileFromRoom,
@@ -114,6 +115,7 @@ function RoomContent({ code }: RoomPageClientProps) {
         onCreateRoom={createRoom}
         onJoinRoom={joinRoom}
         onUploadFile={uploadFileToRoom}
+        onCancelUpload={cancelRoomUpload}
         onDownloadFile={downloadFile}
         onDeleteFile={deleteFileFromRoom}
         onUpdateRecipients={updateFileRecipients}
