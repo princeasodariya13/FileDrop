@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { RoomState, RoomFile, RoomDevice, RoomSummary } from "@/types/room";
+import { RoomState, RoomFile, RoomSummary } from "@/types/room";
 import { DeviceBadge } from "./DeviceBadge";
 import { ActiveRoomsSelector } from "./ActiveRoomsSelector";
 import { Button } from "@/components/ui/Button";
 import { QRCodeModal } from "@/components/ui/QRCodeModal";
-import { formatBytes, formatTimestamp, formatRelativeExpiry, formatTimeAgo, isRecentUpload, getRoomFileExpiryInfo } from "@/utils/format";
+import { formatBytes, formatTimestamp, formatTimeAgo, isRecentUpload, getRoomFileExpiryInfo } from "@/utils/format";
 import { useToast } from "@/components/ui/Toast";
 import { scrollToElement } from "@/utils/scroll";
 
@@ -345,7 +345,7 @@ export function RoomView({
           setPendingFiles((prev) => prev.filter((p) => p.id !== item.id));
           anyUploaded = true;
         }
-      } catch (err: any) {
+      } catch {
         // Stop sequential queue on error or user cancellation
         break;
       }
@@ -442,7 +442,7 @@ export function RoomView({
     try {
       await onDeleteFile(fileToDelete.fileId);
       setFileToDelete(null);
-    } catch (err) {
+    } catch {
       // Error toast is handled in hook
     } finally {
       setIsDeleting(false);
@@ -465,7 +465,7 @@ export function RoomView({
     try {
       await onUpdateRecipients(fileToEditRecipients.fileId, editRecipientIds);
       setFileToEditRecipients(null);
-    } catch (err) {
+    } catch {
       // Error toast is handled in hook
     } finally {
       setIsSavingRecipients(false);
@@ -478,7 +478,7 @@ export function RoomView({
     try {
       await onRemoveDevice(deviceToRemove.deviceId);
       setDeviceToRemove(null);
-    } catch (err) {
+    } catch {
       // Error toast is handled in hook
     } finally {
       setIsRemovingDevice(false);
@@ -494,7 +494,7 @@ export function RoomView({
         await onLeaveRoom();
       }
       setIsLeaveModalOpen(false);
-    } catch (err) {
+    } catch {
       // Toast is handled in hook
     } finally {
       setIsLeaving(false);
@@ -1772,7 +1772,7 @@ export function RoomView({
 
             <p className="text-xs modal-body leading-relaxed">
               Are you sure you want to remove{" "}
-              <span className="font-semibold modal-title">"{fileToDelete.fileName}"</span> from the
+              <span className="font-semibold modal-title">&ldquo;{fileToDelete.fileName}&rdquo;</span> from the
               room? Connected devices will no longer be able to download it.
             </p>
 
@@ -1829,7 +1829,7 @@ export function RoomView({
 
             <p className="text-xs modal-body leading-relaxed">
               Are you sure you want to remove{" "}
-              <span className="font-semibold modal-title">"{deviceToRemove.deviceName}"</span> from
+              <span className="font-semibold modal-title">&ldquo;{deviceToRemove.deviceName}&rdquo;</span> from
               this room? It will be disconnected immediately and cannot reconnect using its current session.
             </p>
 

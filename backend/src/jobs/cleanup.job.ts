@@ -227,7 +227,9 @@ export async function sweepExpiredRooms(): Promise<number> {
   for (const code of roomCodes) {
     try {
       broadcastRoomClosed(code, "expired");
-    } catch (e) {}
+    } catch {
+      // ignore broadcast failure during background cleanup
+    }
   }
 
   return res.modifiedCount;

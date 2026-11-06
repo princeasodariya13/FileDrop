@@ -513,7 +513,7 @@ export function startRoomFileAutoCleaner(): void {
           }
         }
       }
-    } catch (err) {
+    } catch {
       // Non-blocking background worker
     }
   }, 4000);

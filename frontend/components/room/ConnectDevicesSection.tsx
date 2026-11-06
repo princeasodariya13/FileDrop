@@ -17,7 +17,6 @@ export function ConnectDevicesSection() {
     deviceId,
     isConnected,
     isHost,
-    isConnecting,
     isJoining,
     isCreating,
     isInitializing,
@@ -29,7 +28,6 @@ export function ConnectDevicesSection() {
     createRoom,
     joinRoom,
     uploadFileToRoom,
-    uploadFilesToRoom,
     cancelRoomUpload,
     downloadFile,
     updateFileRecipients,
@@ -52,7 +50,7 @@ export function ConnectDevicesSection() {
     if (room) {
       scrollToElement(roomViewRef.current);
     }
-  }, [room?.roomCode]);
+  }, [room]);
 
   const handleCreateRoom = (e?: React.FormEvent) => {
     if (e) e.preventDefault();

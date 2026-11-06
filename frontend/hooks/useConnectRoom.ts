@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { RoomState, RoomDevice, RoomFile, RoomSummary } from "@/types/room";
-import { getDeviceDefaults, getSmartDeviceName } from "@/utils/device";
+import { getDeviceDefaults } from "@/utils/device";
 import { useToast } from "@/components/ui/Toast";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
@@ -104,7 +104,7 @@ function getStoredSessionsMap(): StoredSessionsMap {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object") return parsed;
     }
-  } catch (e) {}
+  } catch {}
 
   // Check legacy single-room session
   try {
@@ -117,7 +117,7 @@ function getStoredSessionsMap(): StoredSessionsMap {
         return map;
       }
     }
-  } catch (e) {}
+  } catch {}
 
   return {};
 }
@@ -142,7 +142,7 @@ function saveStoredSession(session: StoredRoomSession, makeActive: boolean = tru
         detail: { activeSession: session, allSessions: map },
       })
     );
-  } catch (e) {
+  } catch {
     try {
       sessionStorage.setItem(LEGACY_SESSION_KEY, JSON.stringify(session));
     } catch {}
@@ -177,7 +177,7 @@ function removeStoredSession(roomCode: string): string | null {
     );
 
     return nextActiveCode;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -194,7 +194,7 @@ function getActiveStoredSession(): StoredRoomSession | null {
     if (keys.length > 0) {
       return map[keys[0]];
     }
-  } catch (e) {}
+  } catch {}
   return null;
 }
 
@@ -217,6 +217,7 @@ export function useConnectRoom(initialCode?: string) {
 
   const currentUploadControllerRef = useRef<AbortController | null>(null);
   const currentSessionIdRef = useRef<string | null>(null);
+  const switchRoomRef = useRef<((targetCode: string) => Promise<void>) | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const { push } = useToast();
@@ -503,7 +504,7 @@ export function useConnectRoom(initialCode?: string) {
       removeCachedRoomState(code);
       addLeftRoomCode(code);
       if (nextCode) {
-        switchRoom(nextCode);
+        switchRoomRef.current?.(nextCode);
       } else {
         setRoom(null);
         setDeviceId(null);
@@ -523,7 +524,7 @@ export function useConnectRoom(initialCode?: string) {
       removeCachedRoomState(code);
       addLeftRoomCode(code);
       if (nextCode) {
-        switchRoom(nextCode);
+        switchRoomRef.current?.(nextCode);
       } else {
         setRoom(null);
         setDeviceId(null);
@@ -542,6 +543,7 @@ export function useConnectRoom(initialCode?: string) {
 
   // Switch active room
   const switchRoom = async (targetCode: string) => {
+    switchRoomRef.current = switchRoom;
     const cleanCode = targetCode.trim();
     const map = getStoredSessionsMap();
     const session = map[cleanCode];
@@ -862,7 +864,7 @@ export function useConnectRoom(initialCode?: string) {
       const partProgressMap = new Map<number, number>();
 
       let nextIndex = 0;
-      let partError: any = null;
+      let partError: Error | null = null;
 
       const worker = async () => {
         while (nextIndex < session.parts.length && !partError && !signal.aborted) {
@@ -890,8 +892,8 @@ export function useConnectRoom(initialCode?: string) {
               partNumber: part.partNumber,
               etag,
             });
-          } catch (err: any) {
-            partError = err;
+          } catch (err: unknown) {
+            partError = err instanceof Error ? err : new Error(String(err));
             throw err;
           }
         }
@@ -946,13 +948,15 @@ export function useConnectRoom(initialCode?: string) {
 
       setUploadProgress(100);
       push(`Shared ${file.name} to room`, "success");
-    } catch (err: any) {
-      if (err?.name === "AbortError" || err?.message === "Upload cancelled") {
+    } catch (err: unknown) {
+      const errName = err instanceof Error ? err.name : "";
+      const errMsg = err instanceof Error ? err.message : "";
+      if (errName === "AbortError" || errMsg === "Upload cancelled") {
         // User cancelled upload; already cleaned up
         return;
       }
       console.error("Room upload error:", err);
-      push(err.message || "Failed to upload file to room.", "error");
+      push(errMsg || "Failed to upload file to room.", "error");
       throw err;
     } finally {
       currentUploadControllerRef.current = null;
@@ -1415,7 +1419,7 @@ export function useConnectRoom(initialCode?: string) {
                 refreshActiveRoomsList();
               }
             }
-          } catch (e) {
+          } catch {
             // Keep optimistic cached session on network blip
           }
           return;
@@ -1424,7 +1428,7 @@ export function useConnectRoom(initialCode?: string) {
         // 4. If no target session to restore:
         // Reveal UI immediately so user sees Create / Join Room screen. Never auto-join unknown rooms.
         setIsInitializing(false);
-      } catch (e) {
+      } catch {
         // Fallback
       } finally {
         if (!isCancelled) {

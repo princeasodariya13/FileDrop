@@ -73,7 +73,7 @@ export async function createUploadSession(req: Request, res: Response, next: Nex
     let ledgerReserved = false;
 
     try {
-      const [_, b2UploadId] = await Promise.all([
+      const [, b2UploadId] = await Promise.all([
         reserveLedger(input.sizeBytes),
         storage.createMultipartUpload(storageKey, input.mimeType),
       ]);
@@ -188,7 +188,7 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
 
     try {
       await storage.completeMultipartUpload(session.storageKey, session.storageUploadId, input.parts);
-    } catch (err: any) {
+    } catch (_err) {
       const fileCheck = await FileModel.findOne({ fileId });
       if (fileCheck) {
         session.status = "completed";
@@ -249,7 +249,9 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
         if (err.code === 11000) {
           try {
             await FileModel.collection.dropIndex("code_1");
-          } catch (e) {}
+          } catch {
+            // index already dropped or not present
+          }
           file = await FileModel.create({
             fileId,
             code: requestedCode,
@@ -303,7 +305,9 @@ export async function completeUpload(req: Request, res: Response, next: NextFunc
           if (err.code === 11000) {
             try {
               await FileModel.collection.dropIndex("code_1");
-            } catch (e) {}
+            } catch {
+              // index already dropped or not present
+            }
             attempts++;
             continue;
           }

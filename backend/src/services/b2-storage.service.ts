@@ -32,7 +32,7 @@ export class B2StorageService implements IStorageService {
       if (parts.length > 1) {
         region = parts[1];
       }
-    } catch (err) {
+    } catch {
       // Ignore URL parsing errors and fallback
     }
 
@@ -226,7 +226,7 @@ export class B2StorageService implements IStorageService {
           });
           await this.client.send(bulkDeleteCmd);
         }
-      } catch (versionErr) {
+      } catch {
         // Fallback to standard delete if version listing is unneeded or unsupported
       }
 

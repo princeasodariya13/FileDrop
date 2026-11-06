@@ -33,7 +33,6 @@ function RoomContent({ code }: RoomPageClientProps) {
     joinRoom,
     switchRoom,
     uploadFileToRoom,
-    uploadFilesToRoom,
     cancelRoomUpload,
     downloadFile,
     updateFileRecipients,
@@ -61,11 +60,11 @@ function RoomContent({ code }: RoomPageClientProps) {
         const body = await res.json();
         if (!isCancelled) {
           if (res.ok && body.success && body.data) {
-            const devList = body.data.devices || [];
-            const names = devList.map((d: any) => d.deviceName);
+            const devList = (body.data.devices || []) as Array<{ deviceName: string; isHost?: boolean }>;
+            const names = devList.map((d) => d.deviceName);
             setExistingDeviceNames(names);
 
-            const host = devList.find((d: any) => d.isHost);
+            const host = devList.find((d) => d.isHost);
             if (host) setHostName(host.deviceName);
 
             // Compute smart numbered name (e.g. Windows User 2, Android Device 2)
@@ -75,9 +74,10 @@ function RoomContent({ code }: RoomPageClientProps) {
             setPreviewError(body?.error?.message || "Room not found or has expired.");
           }
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!isCancelled) {
-          setPreviewError(err?.message || "Could not connect to room server.");
+          const message = err instanceof Error ? err.message : "Could not connect to room server.";
+          setPreviewError(message);
         }
       } finally {
         if (!isCancelled) {
